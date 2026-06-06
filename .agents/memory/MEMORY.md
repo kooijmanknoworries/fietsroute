@@ -2,7 +2,7 @@
 - [Nominatim geocoding](nominatim-geocode.md) — geocoding place names needs a descriptive User-Agent + 1 req/s (debounce+cache); fit map to result boundingbox [s,n,w,e].
 - [MapLibre GL WebGL](maplibre-webgl.md) — v4 dropped `maplibregl.supported`; wrap Map ctor in try/catch; headless screenshot env has no WebGL but real browsers do.
 - [Overpass persistent cache](overpass-persistent-cache.md) — Overpass results cached in Postgres (`overpass_cache`) with 7-day TTL behind an in-memory L1; cache lives in `fetchOverpass`.
-- [Workspace db typecheck](workspace-db-typecheck.md) — after adding exports to `@workspace/db`, rebuild its `dist/*.d.ts` (`tsc -b lib/db/tsconfig.json`) or api-server typecheck fails on missing members.
+- [Workspace lib typecheck](workspace-db-typecheck.md) — after adding exports to a referenced lib (`@workspace/db`, `@workspace/api-zod`), rebuild its `dist/*.d.ts` (`tsc -b lib/<pkg>/tsconfig.json`) or api-server typecheck fails on missing members.
 - [Saved routes ownership](saved-routes-ownership.md) — routes scoped per-browser via anonymous `x-owner-key` header (localStorage), not real auth; ownership column exists for future upgrade.
 - [Orval schema naming](orval-schema-naming.md) — response component schemas must not be named `<OperationId>Response` or codegen double-exports and tsc fails TS2308; use `...Result`.
 - [API server has no hot reload](api-server-no-hot-reload.md) — api-server dev is `build && start`; restart the workflow after editing server code or tests run against the stale build.
