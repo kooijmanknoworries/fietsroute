@@ -71,9 +71,43 @@ const DISCONNECTED_ELEMENTS = [
   { type: "way", id: 201, nodes: [13, 14] },
 ];
 
+// Two requested nodes that sit close together (valid area) but far from every
+// vertex of the mocked network, so each fails to snap within MAX_SNAP_METERS.
+// Offset to lon ~7 so its bbox/cache key stays disjoint from the cases above.
+const UNSNAPPABLE_NODES: TestNode[] = [
+  { id: "21", ref: "21", lat: 52.0, lon: 7.0 },
+  { id: "22", ref: "22", lat: 52.002, lon: 7.002 },
+];
+
+// The network lies ~3.4km east of the requested nodes (0.05 deg lon at lat 52),
+// well beyond MAX_SNAP_METERS (200m), so resolveVertex can't snap either node.
+const UNSNAPPABLE_ELEMENTS = [
+  { type: "node", id: 31, lat: 52.0, lon: 7.05 },
+  { type: "node", id: 32, lat: 52.001, lon: 7.051 },
+  { type: "way", id: 300, nodes: [31, 32] },
+];
+
+// Two nodes whose padded bbox spans more than MAX_ROUTE_AREA_DEG2 (1.0). With a
+// 0.08 pad on each side a 1.5x1.5 deg span yields (1.66)^2 ~= 2.75 deg^2. These
+// are rejected before any Overpass call, so no mock/cache handling is needed.
+const TOO_FAR_NODES: TestNode[] = [
+  { id: "1", ref: "1", lat: 52.0, lon: 5.0 },
+  { id: "3", ref: "3", lat: 53.5, lon: 6.5 },
+];
+
+// 51 nodes (> MAX_ROUTE_NODES, which is 50). Kept close together so only the
+// node-count guard trips; this is also rejected before any Overpass call.
+const TOO_MANY_NODES: TestNode[] = Array.from({ length: 51 }, (_, i) => ({
+  id: String(i + 1),
+  ref: String(i + 1),
+  lat: 52.0,
+  lon: 5.0 + i * 0.0001,
+}));
+
 const TEST_CACHE_KEYS = [
   routeCacheKey(CONNECTED_NODES),
   routeCacheKey(DISCONNECTED_NODES),
+  routeCacheKey(UNSNAPPABLE_NODES),
 ];
 
 async function clearOverpassCache(): Promise<void> {
@@ -163,5 +197,42 @@ describe("POST /api/route", () => {
 
     expect(res.status).toBe(422);
     expect(res.body.message).toMatch(/no connecting path/i);
+  });
+
+  it("returns 400 when the selected nodes span too large an area", async () => {
+    // Rejected by the area guard before any Overpass call, so no mock is set.
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const res = await request(buildApp())
+      .post("/api/route")
+      .send({ nodes: TOO_FAR_NODES });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/too far apart/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when more than the maximum number of nodes are selected", async () => {
+    // Rejected by the node-count guard before any Overpass call.
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const res = await request(buildApp())
+      .post("/api/route")
+      .send({ nodes: TOO_MANY_NODES });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/too many nodes/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns 422 when a node cannot be snapped onto the network", async () => {
+    mockOverpass(UNSNAPPABLE_ELEMENTS);
+
+    const res = await request(buildApp())
+      .post("/api/route")
+      .send({ nodes: UNSNAPPABLE_NODES });
+
+    expect(res.status).toBe(422);
+    expect(res.body.message).toMatch(/could not locate node/i);
   });
 });
