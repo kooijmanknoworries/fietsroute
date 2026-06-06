@@ -13,7 +13,13 @@ interface MapProps {
   flyToRegion?: { lat: number; lon: number; zoom: number } | null;
 }
 
-const CYCLOSM_URL = "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png";
+const OSM_TILE_URLS = [
+  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
+];
+
+const UTRECHT = { lat: 52.0907, lon: 5.1214, zoom: 13 };
 
 export default function Map({
   nodes,
@@ -45,9 +51,9 @@ export default function Map({
           sources: {
             "raster-tiles": {
               type: "raster",
-              tiles: [CYCLOSM_URL],
+              tiles: OSM_TILE_URLS,
               tileSize: 256,
-              attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, Tiles style by <a href="https://www.cyclosm.org">CyclOSM</a>'
+              attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             }
           },
           layers: [
@@ -60,8 +66,8 @@ export default function Map({
             }
           ]
         },
-        center: [5.0, 51.8],
-        zoom: 8
+        center: [UTRECHT.lon, UTRECHT.lat],
+        zoom: UTRECHT.zoom
       });
     } catch {
       setMapError(true);
