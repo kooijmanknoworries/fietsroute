@@ -56,9 +56,9 @@ function viewportForCoordinates(
 // neighbours. At low zoom a single view already covers a huge area, so
 // pre-loading the surrounding ring would mean very large Overpass queries for
 // little benefit — skip pre-loading in that case.
-const MAX_PREFETCH_SPAN_DEG = 0.6;
+export const MAX_PREFETCH_SPAN_DEG = 0.6;
 
-interface Neighbour {
+export interface Neighbour {
   bbox: string;
   // Offset of this tile from the current view, in whole-view steps. Used to
   // score the tile against the user's pan direction.
@@ -71,7 +71,7 @@ interface Neighbour {
 // the relevant direction. The values are formatted exactly like the map's
 // snapped bboxes (`Number(v.toFixed(3))`), so when the user pans one screen over
 // the resulting query key matches and is served from cache.
-function neighbourBboxes(bbox: string): Neighbour[] {
+export function neighbourBboxes(bbox: string): Neighbour[] {
   const parts = bbox.split(",").map(Number);
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return [];
   const [west, south, east, north] = parts;
@@ -101,7 +101,7 @@ function neighbourBboxes(bbox: string): Neighbour[] {
 // direction. The leading edge is fetched eagerly so panning that way stays
 // instant; the trailing tiles are warmed lazily (and skipped on slow links),
 // which keeps total background traffic down when the user keeps panning.
-function splitNeighboursByDirection(
+export function splitNeighboursByDirection(
   neighbours: Neighbour[],
   direction: { dx: number; dy: number } | null,
 ): { leading: Neighbour[]; trailing: Neighbour[] } {
@@ -130,7 +130,7 @@ function splitNeighboursByDirection(
 // Heuristic for a slow / data-saver connection using the Network Information
 // API where available. On such links we only warm the leading edge and skip
 // the trailing tiles entirely.
-function isSlowConnection(): boolean {
+export function isSlowConnection(): boolean {
   const conn = (
     navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
