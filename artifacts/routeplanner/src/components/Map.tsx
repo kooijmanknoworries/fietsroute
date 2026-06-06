@@ -3,6 +3,7 @@ import maplibregl from "maplibre-gl";
 import { Map as MapIcon, Satellite, LocateFixed } from "lucide-react";
 import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
 import { getBaseLayer, setBaseLayer, type BaseLayer } from "@/lib/map-view";
+import { useI18n } from "@/lib/i18n";
 
 interface Bounds {
   south: number;
@@ -65,6 +66,7 @@ export default function Map({
   initialBounds,
   fitBounds
 }: MapProps) {
+  const { t } = useI18n();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const nodesRef = useRef(nodes);
@@ -514,10 +516,10 @@ export default function Map({
           <button
             type="button"
             onClick={onRecenter}
-            title="Center on default area"
+            title={t("map.centerTitle")}
             className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent"
           >
-            <LocateFixed className="h-3.5 w-3.5" /> Center
+            <LocateFixed className="h-3.5 w-3.5" /> {t("map.center")}
           </button>
         </div>
       )}
@@ -527,7 +529,7 @@ export default function Map({
             type="button"
             onClick={() => toggleBaseLayer("map")}
             aria-pressed={baseLayer === "map"}
-            title="Street map view"
+            title={t("map.streetTitle")}
             className={
               "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
               (baseLayer === "map"
@@ -535,13 +537,13 @@ export default function Map({
                 : "text-muted-foreground hover:bg-accent")
             }
           >
-            <MapIcon className="h-3.5 w-3.5" /> Map
+            <MapIcon className="h-3.5 w-3.5" /> {t("map.street")}
           </button>
           <button
             type="button"
             onClick={() => toggleBaseLayer("satellite")}
             aria-pressed={baseLayer === "satellite"}
-            title="Satellite view"
+            title={t("map.satelliteTitle")}
             className={
               "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
               (baseLayer === "satellite"
@@ -549,16 +551,14 @@ export default function Map({
                 : "text-muted-foreground hover:bg-accent")
             }
           >
-            <Satellite className="h-3.5 w-3.5" /> Satellite
+            <Satellite className="h-3.5 w-3.5" /> {t("map.satellite")}
           </button>
         </div>
       )}
       {mapError && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted p-8 text-center">
           <p className="max-w-md text-sm text-muted-foreground">
-            The interactive map could not start because this browser or
-            environment does not support WebGL. Try opening the app in a
-            standard desktop browser with hardware acceleration enabled.
+            {t("map.webglError")}
           </p>
         </div>
       )}

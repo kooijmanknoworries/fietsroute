@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { useDebounce } from "use-debounce";
+import { useI18n } from "@/lib/i18n";
 import { 
   useGetNetwork, 
   usePlanRoute, 
@@ -143,6 +144,9 @@ function isSlowConnection(): boolean {
 export function useRoutePlanner() {
   const queryClient = useQueryClient();
   const { isSignedIn } = useAuth();
+  const { t } = useI18n();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [bbox, setBbox] = useState<string>("");
   const [debouncedBbox] = useDebounce(bbox, 500);
 
@@ -277,7 +281,7 @@ export function useRoutePlanner() {
               setRoutePlan(plan);
             },
             onError: (err) => {
-              setRouteError(err.message || "Could not find a connecting path between these nodes.");
+              setRouteError(err.message || tRef.current("error.noPath"));
               // revert the last selection if it failed to route
               setSelectedNodes(prevSelection => prevSelection.slice(0, -1));
             }
@@ -302,7 +306,7 @@ export function useRoutePlanner() {
           { data: { nodes: newSelection } },
           {
             onSuccess: (plan) => setRoutePlan(plan),
-            onError: (err) => setRouteError(err.message || "Failed to compute route.")
+            onError: (err) => setRouteError(err.message || tRef.current("error.computeFailed"))
           }
         );
       }
@@ -381,7 +385,7 @@ export function useRoutePlanner() {
       }
     } catch (err) {
       setRouteError(
-        err instanceof Error ? err.message : "Failed to open saved route.",
+        err instanceof Error ? err.message : tRef.current("error.openFailed"),
       );
     } finally {
       setOpeningRouteId(null);

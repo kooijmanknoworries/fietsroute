@@ -50,6 +50,7 @@ import { useRoutePlanner } from "@/hooks/use-route-planner";
 import { useClaimAnonymousRoutes } from "@/hooks/use-claim-anonymous-routes";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
+import { useI18n } from "@/lib/i18n";
 
 export default function Home() {
   const {
@@ -100,6 +101,7 @@ export default function Home() {
   } = useClaimAnonymousRoutes();
 
   const { toast } = useToast();
+  const { lang, setLang, t } = useI18n();
   const [, setLocation] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -147,11 +149,11 @@ export default function Home() {
   const handleToggleFavorite = (m: MunicipalityResult) => {
     if (favorite?.id === m.id) {
       removeFavorite();
-      toast({ title: "Favorite removed", description: `"${m.name}" is no longer your start area.` });
+      toast({ title: t("toast.favRemoved.title"), description: t("toast.favRemoved.desc", { name: m.name }) });
     } else {
       saveFavorite(m);
       setBoundaryGeometry(m.geometry ?? null);
-      toast({ title: "Favorite set", description: `The map will open at "${m.name}" next time.` });
+      toast({ title: t("toast.favSet.title"), description: t("toast.favSet.desc", { name: m.name }) });
     }
   };
 
@@ -161,7 +163,7 @@ export default function Home() {
     const name = routeName.trim();
     if (!name) return;
     handleSaveRoute(name);
-    toast({ title: "Route saved", description: `"${name}" added to your saved routes.` });
+    toast({ title: t("toast.routeSaved.title"), description: t("toast.routeSaved.desc", { name }) });
     setRouteName("");
     setSaveDialogOpen(false);
   };
@@ -180,12 +182,12 @@ export default function Home() {
     }
     try {
       await handleRenameSavedRoute(renameTarget.id, name);
-      toast({ title: "Route renamed", description: `Renamed to "${name}".` });
+      toast({ title: t("toast.routeRenamed.title"), description: t("toast.routeRenamed.desc", { name }) });
       setRenameTarget(null);
     } catch (err) {
       toast({
-        title: "Rename failed",
-        description: err instanceof Error ? err.message : "Could not rename the route.",
+        title: t("toast.renameFailed.title"),
+        description: err instanceof Error ? err.message : t("toast.renameFailed.desc"),
         variant: "destructive",
       });
     }
@@ -196,23 +198,23 @@ export default function Home() {
       const count = await claimAnonymousRoutes();
       if (count > 0) {
         toast({
-          title: "Routes imported",
+          title: t("toast.routesImported.title"),
           description:
             count === 1
-              ? "1 route saved on this device is now in your account."
-              : `${count} routes saved on this device are now in your account.`,
+              ? t("toast.routesImported.descOne")
+              : t("toast.routesImported.descMany", { count }),
         });
       } else {
         toast({
-          title: "Nothing to import",
-          description: "No routes from this device were found.",
+          title: t("toast.nothingToImport.title"),
+          description: t("toast.nothingToImport.desc"),
         });
       }
     } catch (err) {
       toast({
-        title: "Import failed",
+        title: t("toast.importFailed.title"),
         description:
-          err instanceof Error ? err.message : "Could not import your routes.",
+          err instanceof Error ? err.message : t("toast.importFailed.desc"),
         variant: "destructive",
       });
     }
@@ -234,8 +236,8 @@ export default function Home() {
           const coords = parseGPX(text);
           if (coords.length === 0) {
             toast({
-              title: "Couldn't import this file",
-              description: "No valid track points found in this file.",
+              title: t("toast.gpxImportFailed.title"),
+              description: t("toast.gpxImportFailed.desc"),
               variant: "destructive",
             });
             return;
@@ -264,28 +266,60 @@ export default function Home() {
               <MapIcon className="h-6 w-6" />
               <h1 className="text-xl font-bold tracking-tight">Fietsrouteplanner</h1>
             </div>
-            <Show when="signed-in">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 shrink-0"
-                onClick={() => signOut({ redirectUrl: basePath || "/" })}
-              >
-                <LogOut className="mr-1.5 h-4 w-4" /> Sign out
-              </Button>
-            </Show>
-            <Show when="signed-out">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 shrink-0"
-                onClick={() => setLocation("/sign-in")}
-              >
-                <LogIn className="mr-1.5 h-4 w-4" /> Sign in
-              </Button>
-            </Show>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex overflow-hidden rounded-md border border-primary-foreground/30 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setLang("nl")}
+                  aria-pressed={lang === "nl"}
+                  title={t("lang.switchToDutch")}
+                  className={
+                    "px-2 py-1 transition-colors " +
+                    (lang === "nl"
+                      ? "bg-primary-foreground text-primary"
+                      : "text-primary-foreground/80 hover:bg-primary-foreground/10")
+                  }
+                >
+                  NL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLang("en")}
+                  aria-pressed={lang === "en"}
+                  title={t("lang.switchToEnglish")}
+                  className={
+                    "px-2 py-1 transition-colors " +
+                    (lang === "en"
+                      ? "bg-primary-foreground text-primary"
+                      : "text-primary-foreground/80 hover:bg-primary-foreground/10")
+                  }
+                >
+                  EN
+                </button>
+              </div>
+              <Show when="signed-in">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={() => signOut({ redirectUrl: basePath || "/" })}
+                >
+                  <LogOut className="mr-1.5 h-4 w-4" /> {t("auth.signOut")}
+                </Button>
+              </Show>
+              <Show when="signed-out">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={() => setLocation("/sign-in")}
+                >
+                  <LogIn className="mr-1.5 h-4 w-4" /> {t("auth.signIn")}
+                </Button>
+              </Show>
+            </div>
           </div>
-          <p className="text-sm opacity-90">Plan your cycling adventure in NL/BE</p>
+          <p className="text-sm opacity-90">{t("app.subtitle")}</p>
           <Show when="signed-in">
             {user?.primaryEmailAddress?.emailAddress && (
               <p className="text-xs opacity-75 mt-1 truncate">
@@ -300,7 +334,7 @@ export default function Home() {
           {/* Quick Jump */}
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-              <Compass className="h-4 w-4" /> Quick Jump to Region
+              <Compass className="h-4 w-4" /> {t("quickJump.label")}
             </label>
             <Select 
               onValueChange={(value) => {
@@ -311,7 +345,7 @@ export default function Home() {
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select a region..." />
+                <SelectValue placeholder={t("quickJump.placeholder")} />
               </SelectTrigger>
               <SelectContent>
                 {regions?.map(region => (
@@ -326,7 +360,7 @@ export default function Home() {
           {/* Municipality search */}
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
-              <Search className="h-4 w-4" /> Find a Municipality
+              <Search className="h-4 w-4" /> {t("muni.label")}
             </label>
             <Popover open={municipalityOpen} onOpenChange={setMunicipalityOpen}>
               <PopoverTrigger asChild>
@@ -336,28 +370,28 @@ export default function Home() {
                   className="w-full justify-start font-normal text-muted-foreground"
                 >
                   <Search className="mr-2 h-4 w-4" />
-                  Search gemeente (NL/BE)...
+                  {t("muni.searchButton")}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
                 <Command shouldFilter={false}>
                   <CommandInput
-                    placeholder="Type a municipality name..."
+                    placeholder={t("muni.inputPlaceholder")}
                     value={municipalityQuery}
                     onValueChange={setMunicipalityQuery}
                   />
                   <CommandList>
                     {isSearchingMunicipality && (
                       <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" /> Searching...
+                        <Loader2 className="h-4 w-4 animate-spin" /> {t("muni.searching")}
                       </div>
                     )}
                     {!isSearchingMunicipality && municipalityQuery.trim().length >= 2 && (
-                      <CommandEmpty>No municipalities found.</CommandEmpty>
+                      <CommandEmpty>{t("muni.noResults")}</CommandEmpty>
                     )}
                     {!isSearchingMunicipality && municipalityQuery.trim().length < 2 && (
                       <div className="px-3 py-4 text-sm text-muted-foreground">
-                        Type at least 2 characters to search.
+                        {t("muni.typeMore")}
                       </div>
                     )}
                     {municipalityResults.length > 0 && (
@@ -378,7 +412,7 @@ export default function Home() {
                             </div>
                             <button
                               type="button"
-                              title={favorite?.id === m.id ? "Remove favorite" : "Set as favorite start area"}
+                              title={favorite?.id === m.id ? t("muni.removeFavorite") : t("muni.setFavorite")}
                               className="shrink-0 rounded p-1 hover:bg-accent"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -407,15 +441,15 @@ export default function Home() {
               <div className="flex items-center gap-2 rounded-md bg-secondary/50 px-2 py-1.5 text-xs">
                 <Star className="h-3.5 w-3.5 shrink-0 fill-yellow-400 text-yellow-500" />
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                  Opens at <span className="font-medium text-foreground">{favorite.name}</span>
+                  {t("muni.opensAtPrefix")} <span className="font-medium text-foreground">{favorite.name}</span>
                 </span>
                 <button
                   type="button"
-                  title="Clear favorite"
+                  title={t("muni.clearFavorite")}
                   className="rounded p-0.5 hover:bg-accent"
                   onClick={() => {
                     removeFavorite();
-                    toast({ title: "Favorite cleared", description: "The map will open at the default area." });
+                    toast({ title: t("toast.favCleared.title"), description: t("toast.favCleared.desc") });
                   }}
                 >
                   <X className="h-3.5 w-3.5 text-muted-foreground" />
@@ -430,21 +464,21 @@ export default function Home() {
           <div className="space-y-2">
             {isNetworkLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading network...
+                <Loader2 className="h-4 w-4 animate-spin" /> {t("network.loading")}
               </div>
             )}
             {!isNetworkLoading && networkData?.truncated && (
               <Alert variant="default" className="bg-secondary text-secondary-foreground border-none">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Zoom in</AlertTitle>
+                <AlertTitle>{t("network.zoomInTitle")}</AlertTitle>
                 <AlertDescription>
-                  Zoom in closer to see all cycling nodes in this area.
+                  {t("network.zoomInDesc")}
                 </AlertDescription>
               </Alert>
             )}
             {!isNetworkLoading && !networkData?.truncated && networkData?.nodes && networkData.nodes.length === 0 && (
               <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <Navigation className="h-4 w-4" /> No nodes found in current view.
+                <Navigation className="h-4 w-4" /> {t("network.noNodes")}
               </div>
             )}
           </div>
@@ -452,13 +486,13 @@ export default function Home() {
           {/* Planning Status */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold tracking-tight">Your Route</h2>
+              <h2 className="text-lg font-semibold tracking-tight">{t("route.yourRoute")}</h2>
               {selectedNodes.length > 0 && (
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo last node" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" onClick={handleUndo} title={t("route.undo")} className="h-8 w-8">
                     <Undo2 className="h-4 w-4" />
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={handleClear} title="Clear route" className="h-8 w-8 text-destructive">
+                  <Button variant="ghost" size="icon" onClick={handleClear} title={t("route.clear")} className="h-8 w-8 text-destructive">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -467,7 +501,7 @@ export default function Home() {
 
             {selectedNodes.length === 0 ? (
               <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
-                Click on a numbered node on the map to start planning your route.
+                {t("route.emptyHint")}
               </div>
             ) : (
               <div className="space-y-4">
@@ -495,7 +529,7 @@ export default function Home() {
                 {routeError && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>Routing Error</AlertTitle>
+                    <AlertTitle>{t("route.errorTitle")}</AlertTitle>
                     <AlertDescription>{routeError}</AlertDescription>
                   </Alert>
                 )}
@@ -503,7 +537,7 @@ export default function Home() {
                 {routePlan && (
                   <div className="bg-secondary/50 rounded-lg p-4 border border-secondary-border flex flex-col gap-3">
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground font-medium">Total Distance:</span>
+                      <span className="text-muted-foreground font-medium">{t("route.totalDistance")}</span>
                       <span className="font-bold text-lg text-foreground">{formatDistance(routePlan.distanceMeters)}</span>
                     </div>
                     <Show when="signed-in">
@@ -513,7 +547,7 @@ export default function Home() {
                         disabled={!canSave}
                         onClick={() => setSaveDialogOpen(true)}
                       >
-                        <Save className="mr-2 h-4 w-4" /> Save route
+                        <Save className="mr-2 h-4 w-4" /> {t("route.saveRoute")}
                       </Button>
                     </Show>
                     <Show when="signed-out">
@@ -523,7 +557,7 @@ export default function Home() {
                         className="w-full"
                         onClick={() => setLocation("/sign-in")}
                       >
-                        <LogIn className="mr-2 h-4 w-4" /> Sign in to save
+                        <LogIn className="mr-2 h-4 w-4" /> {t("route.signInToSave")}
                       </Button>
                     </Show>
                   </div>
@@ -537,29 +571,29 @@ export default function Home() {
           {/* Saved Routes */}
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <Bookmark className="h-4 w-4" /> Saved Routes
+              <Bookmark className="h-4 w-4" /> {t("saved.title")}
             </h3>
             <Show when="signed-out">
               <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center space-y-3">
-                <p>Sign in to save routes and reach them from any device.</p>
+                <p>{t("saved.signInPrompt")}</p>
                 <Button
                   size="sm"
                   variant="outline"
                   className="w-full"
                   onClick={() => setLocation("/sign-in")}
                 >
-                  <LogIn className="mr-2 h-4 w-4" /> Sign in
+                  <LogIn className="mr-2 h-4 w-4" /> {t("auth.signIn")}
                 </Button>
               </div>
             </Show>
             <Show when="signed-in">
               {isLoadingSavedRoutes ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading saved routes...
+                  <Loader2 className="h-4 w-4 animate-spin" /> {t("saved.loading")}
                 </div>
               ) : !savedRoutes || savedRoutes.length === 0 ? (
                 <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
-                  No saved routes yet. Plan a route and tap "Save route" to keep it.
+                  {t("saved.empty")}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -571,14 +605,14 @@ export default function Home() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{route.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {formatDistance(route.distanceMeters)} · {route.nodeRefs.length} nodes
+                          {formatDistance(route.distanceMeters)} · {t("route.nodesCount", { count: route.nodeRefs.length })}
                         </div>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        title="Open route"
+                        title={t("saved.openRoute")}
                         disabled={openingRouteId === route.id}
                         onClick={() => handleOpenSavedRoute(route.id)}
                       >
@@ -592,7 +626,7 @@ export default function Home() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        title="Rename route"
+                        title={t("saved.renameRoute")}
                         onClick={() => openRenameDialog({ id: route.id, name: route.name })}
                       >
                         <Pencil className="h-4 w-4" />
@@ -601,7 +635,7 @@ export default function Home() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-destructive"
-                        title="Delete route"
+                        title={t("saved.deleteRoute")}
                         onClick={() => handleDeleteSavedRoute(route.id)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -617,7 +651,7 @@ export default function Home() {
 
           {/* GPX Tools */}
           <div className="space-y-4 pb-4">
-            <h3 className="text-sm font-semibold text-muted-foreground">Import & Export</h3>
+            <h3 className="text-sm font-semibold text-muted-foreground">{t("gpx.title")}</h3>
             <div className="grid grid-cols-2 gap-2">
               <Button 
                 variant="outline" 
@@ -625,7 +659,7 @@ export default function Home() {
                 disabled={!routePlan?.coordinates?.length}
                 onClick={handleExportGPX}
               >
-                <Download className="mr-2 h-4 w-4" /> Export GPX
+                <Download className="mr-2 h-4 w-4" /> {t("gpx.export")}
               </Button>
               <input 
                 type="file" 
@@ -639,13 +673,13 @@ export default function Home() {
                 className="w-full"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="mr-2 h-4 w-4" /> Import GPX
+                <Upload className="mr-2 h-4 w-4" /> {t("gpx.import")}
               </Button>
             </div>
             {importedCoordinates && (
               <div className="text-xs text-muted-foreground flex justify-between items-center bg-muted p-2 rounded">
-                <span>GPX track loaded</span>
-                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setImportedCoordinates(null)}>Clear</Button>
+                <span>{t("gpx.loaded")}</span>
+                <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setImportedCoordinates(null)}>{t("common.clear")}</Button>
               </div>
             )}
           </div>
@@ -675,14 +709,14 @@ export default function Home() {
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Save route</DialogTitle>
+            <DialogTitle>{t("dialog.save.title")}</DialogTitle>
             <DialogDescription>
-              Give your route a name so you can reopen it later.
+              {t("dialog.save.desc")}
             </DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
-            placeholder="e.g. Sunday loop along the Maas"
+            placeholder={t("dialog.save.placeholder")}
             value={routeName}
             onChange={(e) => setRouteName(e.target.value)}
             onKeyDown={(e) => {
@@ -691,7 +725,7 @@ export default function Home() {
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitSaveRoute} disabled={!routeName.trim() || isSavingRoute}>
               {isSavingRoute ? (
@@ -699,7 +733,7 @@ export default function Home() {
               ) : (
                 <Save className="mr-2 h-4 w-4" />
               )}
-              Save
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -714,14 +748,14 @@ export default function Home() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename route</DialogTitle>
+            <DialogTitle>{t("dialog.rename.title")}</DialogTitle>
             <DialogDescription>
-              Update the name of your saved route.
+              {t("dialog.rename.desc")}
             </DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
-            placeholder="Route name"
+            placeholder={t("dialog.rename.placeholder")}
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
             onKeyDown={(e) => {
@@ -730,7 +764,7 @@ export default function Home() {
           />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameTarget(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitRenameRoute} disabled={!renameValue.trim() || isRenamingRoute}>
               {isRenamingRoute ? (
@@ -738,7 +772,7 @@ export default function Home() {
               ) : (
                 <Pencil className="mr-2 h-4 w-4" />
               )}
-              Rename
+              {t("common.rename")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -753,10 +787,9 @@ export default function Home() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import routes from this device?</DialogTitle>
+            <DialogTitle>{t("dialog.import.title")}</DialogTitle>
             <DialogDescription>
-              We found cycling routes you saved on this device before signing in.
-              Import them into your account so you can reach them from anywhere.
+              {t("dialog.import.desc")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -765,7 +798,7 @@ export default function Home() {
               onClick={dismissClaim}
               disabled={isClaiming}
             >
-              Not now
+              {t("dialog.import.notNow")}
             </Button>
             <Button onClick={handleClaimRoutes} disabled={isClaiming}>
               {isClaiming ? (
@@ -773,7 +806,7 @@ export default function Home() {
               ) : (
                 <Upload className="mr-2 h-4 w-4" />
               )}
-              Import routes
+              {t("dialog.import.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

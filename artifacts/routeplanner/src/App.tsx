@@ -19,6 +19,7 @@ import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useI18n } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import { queryClient } from "@/lib/queryClient";
@@ -153,6 +154,7 @@ function Router() {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  const { t } = useI18n();
 
   return (
     <ClerkProvider
@@ -164,14 +166,14 @@ function ClerkProviderWithRoutes() {
       localization={{
         signIn: {
           start: {
-            title: "Welcome back",
-            subtitle: "Sign in to access your saved cycling routes",
+            title: t("auth.signInTitle"),
+            subtitle: t("auth.signInSubtitle"),
           },
         },
         signUp: {
           start: {
-            title: "Create your account",
-            subtitle: "Save your cycling routes and reach them from any device",
+            title: t("auth.signUpTitle"),
+            subtitle: t("auth.signUpSubtitle"),
           },
         },
       }}
