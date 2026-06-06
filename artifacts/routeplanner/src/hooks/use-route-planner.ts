@@ -182,6 +182,14 @@ export function useRoutePlanner() {
     [routePlan, selectedNodes, saveRouteMutation, queryClient],
   );
 
+  const handleImportRoute = useCallback((coordinates: number[][]) => {
+    setImportedCoordinates(coordinates);
+    const viewport = viewportForCoordinates(coordinates);
+    if (viewport) {
+      setFlyToRegion(viewport);
+    }
+  }, []);
+
   const [openingRouteId, setOpeningRouteId] = useState<string | null>(null);
 
   const handleOpenSavedRoute = useCallback(async (id: string) => {
@@ -249,6 +257,7 @@ export function useRoutePlanner() {
     isPlanningRoute: planRoute.isPending,
     importedCoordinates,
     setImportedCoordinates,
+    handleImportRoute,
     flyToRegion,
     setFlyToRegion,
     handleNodeClick,

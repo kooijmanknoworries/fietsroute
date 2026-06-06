@@ -63,6 +63,7 @@ export default function Home() {
     isPlanningRoute,
     importedCoordinates,
     setImportedCoordinates,
+    handleImportRoute,
     flyToRegion,
     setFlyToRegion,
     handleNodeClick,
@@ -171,7 +172,7 @@ export default function Home() {
         const text = event.target?.result as string;
         if (text) {
           const coords = parseGPX(text);
-          setImportedCoordinates(coords);
+          handleImportRoute(coords);
         }
       };
       reader.readAsText(file);
