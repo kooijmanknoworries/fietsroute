@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 
+interface MapStyle {
+  glyphs?: string;
+  sources?: Record<string, unknown>;
+  layers?: Array<Record<string, unknown>>;
+}
+
 interface MapOptions {
   bounds?: [[number, number], [number, number]];
   center?: [number, number];
   zoom?: number;
   fitBoundsOptions?: unknown;
+  style?: MapStyle;
 }
 
 const { constructorCalls, fitBoundsCalls } = vi.hoisted(() => ({
@@ -112,6 +119,20 @@ describe("Map", () => {
     expect(opts.bounds).toBeUndefined();
     expect(opts.center).toEqual([5.1214, 52.0907]);
     expect(opts.zoom).toBe(13);
+  });
+
+  it("includes a glyphs source so the knooppunt number text layer can load its font", () => {
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
+
+    expect(constructorCalls).toHaveLength(1);
+    const style = constructorCalls[0].style;
+    expect(style).toBeDefined();
+    expect(typeof style?.glyphs).toBe("string");
+    expect(style?.glyphs).toMatch(/\{fontstack\}.*\{range\}/);
   });
 
   it("fits the map to a selected municipality's bounds via fitBounds", () => {
