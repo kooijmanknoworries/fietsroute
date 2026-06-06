@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { inArray } from "drizzle-orm";
-import { db, networkNodesTable, networkSegmentsTable, pool } from "@workspace/db";
+import { inArray, like, or } from "drizzle-orm";
+import {
+  db,
+  networkNodesTable,
+  networkSegmentsTable,
+  overpassCacheTable,
+  pool,
+} from "@workspace/db";
 import { getNetworkFromDataset, isDatasetReady } from "./dataset";
 import { getNetworkData } from "./network";
 import type { Bbox } from "./overpass";
@@ -99,6 +105,12 @@ describe("network dataset", () => {
       maxLon: 1.55,
       maxLat: 40.55,
     };
+    // The live path uses fetchOverpassTiles, which reads a persistent Postgres
+    // cache that survives across test runs. Clear this region's cached tiles so
+    // the live fetch is actually issued and the assertion is deterministic.
+    await db
+      .delete(overpassCacheTable)
+      .where(or(like(overpassCacheTable.key, "1.4%"), like(overpassCacheTable.key, "1.5%")));
     const liveElements = [
       { type: "node", id: 777001, lat: 40.52, lon: 1.52, tags: { rcn_ref: "77" } },
     ];

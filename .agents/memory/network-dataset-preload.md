@@ -4,25 +4,24 @@ description: Why the cycling node network is stored locally and how serving fall
 ---
 
 The full NL+BE cycling node network (rcn) is preloaded into durable Postgres
-tables (`network_nodes`, `network_segments`) separate from the short-lived
-`overpass_cache`. Serving prefers this dataset (one indexed bbox query, instant,
-covers a large viewport) and only falls back to the live per-tile Overpass path
-when the dataset is empty (not yet imported) or a query throws.
+tables, separate from the short-lived per-tile Overpass cache. Serving prefers
+this dataset (one indexed bbox query, instant, large viewport) and falls back to
+the live per-tile Overpass path when the dataset is empty or a query throws.
 
-**Why:** Live per-tile Overpass fetches on every pan were slow and the small
+**Why:** Live per-tile Overpass fetches on every pan were slow, and the small
 area cap only showed a tiny cluster when zoomed out. Local serving mirrors
 fietsknooppunt.app's instant panning.
 
 **How to apply:**
-- Readiness is probed cheaply (`SELECT 1 ... LIMIT 1`) and cached ~30s; don't
-  add a per-request count.
-- Two area/size guards differ on purpose: dataset path allows a much larger
-  viewport (DATASET_MAX_AREA_DEG2) than the live path (MAX_AREA_DEG2 0.36), plus
-  a node-count cap that returns `truncated:true`.
-- Importer walks NL+BE in ~0.5° chunks, resilient per-chunk (a failed Overpass
-  chunk is logged and skipped). Upserts use `excluded.*` so batch conflicts keep
-  each row's own values. Refreshes on startup-if-stale (7d) + daily check.
-- Disable the whole preloader with env `DISABLE_NETWORK_PRELOAD=true`.
-- The import only populates when Overpass is reachable; outages leave the table
-  empty and the endpoint on the live fallback (which also fails during an
-  outage — that's external, not a code bug).
+- A partially-imported dataset can have coverage holes (Overpass is flaky and the
+  importer skips failed regions). Guard against it at request time: if the
+  dataset path returns an *empty-but-untruncated* result, fall through to live so
+  that region still loads. Don't assume "any rows exist" means full coverage.
+- Two area guards differ on purpose: the dataset path allows a much larger
+  viewport than the live path, plus a node-count cap that returns truncated.
+- The importer must stay resilient per-region (one failed Overpass chunk must not
+  abort the whole run) and idempotent (upserts), so re-runs heal gaps.
+- The whole preloader is opt-out via env `DISABLE_NETWORK_PRELOAD=true`.
+- Tests that exercise the live fallback must clear the persistent Postgres
+  Overpass cache for the test region first — it survives across runs, so a stale
+  cached tile makes "expect fetch called" flaky/order-dependent.
