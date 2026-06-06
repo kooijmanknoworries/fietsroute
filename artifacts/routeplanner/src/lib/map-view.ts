@@ -38,7 +38,7 @@ export function setBaseLayer(layer: BaseLayer): void {
 
 /**
  * Returns the user's saved street-style choice from localStorage, defaulting to
- * the clean "voyager" look when nothing valid is stored.
+ * the classic "osm" (OpenStreetMap) look when nothing valid is stored.
  */
 export function getStreetStyle(): StreetStyle {
   try {
@@ -51,9 +51,9 @@ export function getStreetStyle(): StreetStyle {
     ) {
       return raw;
     }
-    return "voyager";
+    return "osm";
   } catch {
-    return "voyager";
+    return "osm";
   }
 }
 
