@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
+import { Map as MapIcon, Satellite } from "lucide-react";
 import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
+import { getBaseLayer, setBaseLayer, type BaseLayer } from "@/lib/map-view";
 
 interface Bounds {
   south: number;
@@ -32,6 +34,20 @@ const OSM_TILE_URLS = [
   "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
 ];
 
+// Esri World Imagery: free, keyless high-resolution aerial imagery. Used as a
+// satellite alternative to Google (whose tiles require a paid, licensed API).
+const SATELLITE_TILE_URLS = [
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+];
+// Esri reference overlay so place/road names stay readable over the imagery.
+const SATELLITE_LABEL_URLS = [
+  "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+];
+const OSM_ATTRIBUTION =
+  'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const SATELLITE_ATTRIBUTION =
+  'Imagery &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community';
+
 const UTRECHT = { lat: 52.0907, lon: 5.1214, zoom: 13 };
 
 export default function Map({
@@ -54,6 +70,9 @@ export default function Map({
   const onBboxChangeRef = useRef(onBboxChange);
   const lastCenterRef = useRef<{ lon: number; lat: number } | null>(null);
   const [mapError, setMapError] = useState(false);
+  const [baseLayer, setBaseLayerState] = useState<BaseLayer>(() => getBaseLayer());
+  const baseLayerRef = useRef<BaseLayer>(baseLayer);
+  baseLayerRef.current = baseLayer;
 
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
@@ -61,6 +80,8 @@ export default function Map({
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
+
+    const initialBase = baseLayerRef.current;
 
     try {
       map.current = new maplibregl.Map({
@@ -72,7 +93,18 @@ export default function Map({
               type: "raster",
               tiles: OSM_TILE_URLS,
               tileSize: 256,
-              attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              attribution: OSM_ATTRIBUTION
+            },
+            "satellite-tiles": {
+              type: "raster",
+              tiles: SATELLITE_TILE_URLS,
+              tileSize: 256,
+              attribution: SATELLITE_ATTRIBUTION
+            },
+            "satellite-labels": {
+              type: "raster",
+              tiles: SATELLITE_LABEL_URLS,
+              tileSize: 256
             }
           },
           layers: [
@@ -81,7 +113,24 @@ export default function Map({
               type: "raster",
               source: "raster-tiles",
               minzoom: 0,
-              maxzoom: 22
+              maxzoom: 22,
+              layout: { visibility: initialBase === "map" ? "visible" : "none" }
+            },
+            {
+              id: "satellite-tiles-layer",
+              type: "raster",
+              source: "satellite-tiles",
+              minzoom: 0,
+              maxzoom: 22,
+              layout: { visibility: initialBase === "satellite" ? "visible" : "none" }
+            },
+            {
+              id: "satellite-labels-layer",
+              type: "raster",
+              source: "satellite-labels",
+              minzoom: 0,
+              maxzoom: 22,
+              layout: { visibility: initialBase === "satellite" ? "visible" : "none" }
             }
           ]
         },
@@ -294,6 +343,30 @@ export default function Map({
   }, []);
 
   useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const apply = () => {
+      const showMap = baseLayer === "map";
+      m.setLayoutProperty("simple-tiles", "visibility", showMap ? "visible" : "none");
+      m.setLayoutProperty("satellite-tiles-layer", "visibility", showMap ? "none" : "visible");
+      m.setLayoutProperty("satellite-labels-layer", "visibility", showMap ? "none" : "visible");
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [baseLayer]);
+
+  const toggleBaseLayer = useCallback((next: BaseLayer) => {
+    setBaseLayerState(next);
+    setBaseLayer(next);
+  }, []);
+
+  useEffect(() => {
     if (!map.current || !map.current.isStyleLoaded()) return;
     const m = map.current;
     
@@ -434,6 +507,38 @@ export default function Map({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full bg-muted" />
+      {!mapError && (
+        <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-card/95 shadow-md backdrop-blur">
+          <button
+            type="button"
+            onClick={() => toggleBaseLayer("map")}
+            aria-pressed={baseLayer === "map"}
+            title="Street map view"
+            className={
+              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
+              (baseLayer === "map"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent")
+            }
+          >
+            <MapIcon className="h-3.5 w-3.5" /> Map
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleBaseLayer("satellite")}
+            aria-pressed={baseLayer === "satellite"}
+            title="Satellite view"
+            className={
+              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
+              (baseLayer === "satellite"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-accent")
+            }
+          >
+            <Satellite className="h-3.5 w-3.5" /> Satellite
+          </button>
+        </div>
+      )}
       {mapError && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted p-8 text-center">
           <p className="max-w-md text-sm text-muted-foreground">
