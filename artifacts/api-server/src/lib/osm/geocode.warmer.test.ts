@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import { inArray } from "drizzle-orm";
 import { db, geocodeCacheTable } from "@workspace/db";
 import {
+  __clearGeocodeMemoryCacheForTests,
   COMMON_MUNICIPALITIES,
   isMunicipalityCached,
   warmMunicipalities,
@@ -52,6 +53,33 @@ function mockNominatim(name: string): void {
   );
 }
 
+// Mock Nominatim so specific towns fail while every other town resolves
+// normally. A value of "reject" simulates the service being unreachable (fetch
+// itself throws); a numeric value simulates a non-OK HTTP status. The town is
+// keyed off the structured `city` / free-text `q` query param of the request.
+function mockNominatimWithFailures(
+  fails: Map<string, "reject" | number>,
+): void {
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input: Parameters<typeof fetch>[0]) => {
+      const url = new URL(String(input));
+      const city =
+        url.searchParams.get("city") ?? url.searchParams.get("q") ?? "";
+      const failMode = fails.get(city);
+      if (failMode === "reject") {
+        throw new Error("Nominatim network failure (service down)");
+      }
+      if (typeof failMode === "number") {
+        return new Response("Service Unavailable", { status: failMode });
+      }
+      return new Response(JSON.stringify([nominatimAdminItem(city)]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  );
+}
+
 async function seedCache(names: string[]): Promise<void> {
   if (names.length === 0) return;
   await db
@@ -86,6 +114,10 @@ function fetchedCities(): string[] {
 describe("warmMunicipalities", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
+    // Wipe both cache tiers so each test starts from a true cache miss: the
+    // in-memory L1 cache survives across tests in the same process and would
+    // otherwise mark towns as cached and suppress the fetches we exercise here.
+    __clearGeocodeMemoryCacheForTests();
     await clearCache();
   });
 
@@ -132,5 +164,58 @@ describe("warmMunicipalities", () => {
     await warmMunicipalities();
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("records a failure and keeps warming the rest when Nominatim errors for one town", async () => {
+    // FAIL comes before OK in COMMON_MUNICIPALITIES, so reaching OK proves the
+    // run continued past the error rather than aborting on the first failure.
+    const FAIL = "Venlo";
+    const OK = "Deventer";
+
+    // Seed every name except the failing town and the one that must still warm,
+    // so the warmer only touches Nominatim for those two.
+    await seedCache(COMMON_MUNICIPALITIES.filter((n) => n !== FAIL && n !== OK));
+
+    expect(await isMunicipalityCached(FAIL)).toBe(false);
+    expect(await isMunicipalityCached(OK)).toBe(false);
+
+    // Simulate the geocoder being unreachable for FAIL (fetch throws).
+    mockNominatimWithFailures(new Map([[FAIL, "reject"]]));
+
+    // The run must catch the error and resolve normally, not throw.
+    await expect(warmMunicipalities()).resolves.toBeUndefined();
+
+    const cities = fetchedCities();
+    // Both uncached towns were attempted: the error on FAIL did not stop the run
+    // before it reached OK.
+    expect(cities).toContain(FAIL);
+    expect(cities).toContain(OK);
+
+    // The town after the failure was warmed and is now served from cache.
+    expect(await isMunicipalityCached(OK)).toBe(true);
+  });
+
+  it("does not cache a town whose warm failed", async () => {
+    const FAIL = "Emmen";
+
+    // Seed everything except the failing town so it is the only cache miss.
+    await seedCache(COMMON_MUNICIPALITIES.filter((n) => n !== FAIL));
+
+    expect(await isMunicipalityCached(FAIL)).toBe(false);
+
+    // A non-OK HTTP status is the other way the upstream geocoder can fail.
+    mockNominatimWithFailures(new Map([[FAIL, 503]]));
+
+    await expect(warmMunicipalities()).resolves.toBeUndefined();
+
+    // A failed warm must leave the town uncached in both the in-memory L1 cache
+    // and the persistent Postgres cache.
+    expect(await isMunicipalityCached(FAIL)).toBe(false);
+
+    const rows = await db
+      .select()
+      .from(geocodeCacheTable)
+      .where(inArray(geocodeCacheTable.key, [cacheKey(FAIL)]));
+    expect(rows).toHaveLength(0);
   });
 });

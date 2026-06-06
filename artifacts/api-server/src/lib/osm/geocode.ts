@@ -34,6 +34,13 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
+// Test-only: clear the in-memory L1 cache so tests can assert cache-miss
+// behavior without the L1 cache (populated as a side effect of earlier runs in
+// the same process) shadowing the persistent cache. Not used in production.
+export function __clearGeocodeMemoryCacheForTests(): void {
+  cache.clear();
+}
+
 async function readPersistentCache(
   key: string,
   now: number,
