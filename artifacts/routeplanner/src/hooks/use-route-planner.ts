@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { useDebounce } from "use-debounce";
@@ -11,6 +11,7 @@ import {
   useDeleteSavedRoute,
   useUpdateSavedRoute,
   getSavedRoute,
+  getNetwork,
   getListSavedRoutesQueryKey,
   getGetNetworkQueryKey,
   getGetRegionsQueryKey,
@@ -50,6 +51,42 @@ function viewportForCoordinates(
   return { lat, lon, zoom };
 }
 
+// Maximum span (in degrees) of the current view for which we still pre-load
+// neighbours. At low zoom a single view already covers a huge area, so
+// pre-loading the surrounding ring would mean very large Overpass queries for
+// little benefit — skip pre-loading in that case.
+const MAX_PREFETCH_SPAN_DEG = 0.6;
+
+// Compute the bbox strings for the eight tiles surrounding the current view.
+// Each neighbour keeps the same width/height as the current view and is shifted
+// by one full view in the relevant direction. The values are formatted exactly
+// like the map's snapped bboxes (`Number(v.toFixed(3))`), so when the user pans
+// one screen over the resulting query key matches and is served from cache.
+function neighbourBboxes(bbox: string): string[] {
+  const parts = bbox.split(",").map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return [];
+  const [west, south, east, north] = parts;
+  const width = east - west;
+  const height = north - south;
+  if (width <= 0 || height <= 0) return [];
+  if (width > MAX_PREFETCH_SPAN_DEG || height > MAX_PREFETCH_SPAN_DEG) return [];
+
+  const fmt = (v: number) => Number(v.toFixed(3));
+  const result: string[] = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      const nw = fmt(west + dx * width);
+      const ne = fmt(east + dx * width);
+      const ns = fmt(south + dy * height);
+      const nn = fmt(north + dy * height);
+      if (ns < -90 || nn > 90 || nw < -180 || ne > 180) continue;
+      result.push(`${nw},${ns},${ne},${nn}`);
+    }
+  }
+  return result;
+}
+
 export function useRoutePlanner() {
   const queryClient = useQueryClient();
   const { isSignedIn } = useAuth();
@@ -74,6 +111,56 @@ export function useRoutePlanner() {
       } 
     }
   );
+
+  // Pre-load neighbouring areas in the background once the current view has
+  // settled and its network data has arrived. This warms both the client-side
+  // query cache (so a one-screen pan resolves instantly) and the server-side
+  // tile cache, without blocking or refetching the current view.
+  const prefetchedBboxRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Only start once the current view's data has loaded and nothing is in
+    // flight, so background pre-loading never competes with the visible query.
+    if (!debouncedBbox || !networkData || isNetworkLoading) return;
+    if (prefetchedBboxRef.current === debouncedBbox) return;
+    prefetchedBboxRef.current = debouncedBbox;
+
+    const neighbours = neighbourBboxes(debouncedBbox);
+    if (neighbours.length === 0) return;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      for (const nbBbox of neighbours) {
+        void queryClient.prefetchQuery({
+          queryKey: getGetNetworkQueryKey({ bbox: nbBbox }),
+          queryFn: ({ signal }) => getNetwork({ bbox: nbBbox }, { signal }),
+          // Treat freshly pre-loaded tiles as fresh for a while so panning back
+          // and forth doesn't keep re-issuing the same neighbour fetches.
+          staleTime: 5 * 60 * 1000,
+        });
+      }
+    };
+
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    let idleId: number | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    if (typeof win.requestIdleCallback === "function") {
+      idleId = win.requestIdleCallback(run);
+    } else {
+      timeoutId = setTimeout(run, 300);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== undefined && typeof win.cancelIdleCallback === "function") {
+        win.cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    };
+  }, [debouncedBbox, networkData, isNetworkLoading, queryClient]);
 
   // Regions Query
   const { data: regions } = useGetRegions({
