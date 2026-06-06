@@ -381,7 +381,28 @@ export default function Map({
         }
       });
 
+      // Hide the cycling nodes (knooppunten) once the visible map area is wider
+      // than this, so the map stays readable when zoomed far out.
+      const MAX_NODE_VISIBLE_KM = 10;
+      const updateNodeVisibility = () => {
+        const bounds = m.getBounds();
+        const centreLat = (bounds.getNorth() + bounds.getSouth()) / 2;
+        const toRad = (d: number) => (d * Math.PI) / 180;
+        // Approximate east-west width of the viewport in km at its centre.
+        const widthKm =
+          6371 *
+          Math.cos(toRad(centreLat)) *
+          toRad(bounds.getEast() - bounds.getWest());
+        const visibility = widthKm > MAX_NODE_VISIBLE_KM ? "none" : "visible";
+        for (const layerId of ["nodes-layer-circle", "nodes-layer-text"]) {
+          if (m.getLayer(layerId)) {
+            m.setLayoutProperty(layerId, "visibility", visibility);
+          }
+        }
+      };
+
       const updateBbox = () => {
+        updateNodeVisibility();
         const bounds = m.getBounds();
         // Snap the requested area outward to the 0.1° tile grid the server
         // caches on. Small pans/zooms within the same tiles then produce an
