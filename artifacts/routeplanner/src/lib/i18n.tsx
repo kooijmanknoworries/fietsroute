@@ -89,6 +89,10 @@ const en = {
   "map.streetTitle": "Street map view",
   "map.satellite": "Satellite",
   "map.satelliteTitle": "Satellite view",
+  "map.styleTitle": "Choose a map style",
+  "map.style.voyager": "Voyager",
+  "map.style.positron": "Light",
+  "map.style.dark": "Dark",
   "map.webglError":
     "The interactive map could not start because this browser or environment does not support WebGL. Try opening the app in a standard desktop browser with hardware acceleration enabled.",
 
@@ -201,6 +205,10 @@ const nl: Record<TranslationKey, string> = {
   "map.streetTitle": "Stratenkaart",
   "map.satellite": "Satelliet",
   "map.satelliteTitle": "Satellietweergave",
+  "map.styleTitle": "Kies een kaartstijl",
+  "map.style.voyager": "Voyager",
+  "map.style.positron": "Licht",
+  "map.style.dark": "Donker",
   "map.webglError":
     "De interactieve kaart kon niet starten omdat deze browser of omgeving geen WebGL ondersteunt. Open de app in een normale desktopbrowser met hardwareversnelling ingeschakeld.",
 

@@ -1,8 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { Map as MapIcon, Satellite, LocateFixed } from "lucide-react";
+import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette } from "lucide-react";
 import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
-import { getBaseLayer, setBaseLayer, type BaseLayer } from "@/lib/map-view";
+import {
+  getBaseLayer,
+  setBaseLayer,
+  getStreetStyle,
+  setStreetStyle,
+  STREET_STYLES,
+  type BaseLayer,
+  type StreetStyle,
+} from "@/lib/map-view";
 import { useI18n } from "@/lib/i18n";
 
 interface Bounds {
@@ -30,15 +38,32 @@ interface MapProps {
   fitBounds?: Bounds | null;
 }
 
-// CARTO Voyager: free, keyless basemap with a clean, modern look and crisp,
-// readable labels. The "@2x" variant serves high-resolution (retina) tiles so
-// text and lines stay sharp on high-DPI screens.
-const STREET_TILE_URLS = [
-  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-  "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-  "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
-  "https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png"
-];
+// Free, keyless CARTO raster basemaps. The "@2x" variant serves high-resolution
+// (retina) tiles so text and lines stay sharp on high-DPI screens. Each style is
+// a different "look" the cyclist can pick between:
+//  - voyager : clean, modern colour map with crisp, readable labels (default)
+//  - positron: bright, low-detail light map (good for printing / glare)
+//  - dark    : high-contrast dark map
+const STREET_STYLE_PATHS: Record<StreetStyle, string> = {
+  voyager: "rastertiles/voyager",
+  positron: "light_all",
+  dark: "dark_all",
+};
+
+const streetTileUrls = (style: StreetStyle): string[] =>
+  ["a", "b", "c", "d"].map(
+    (sub) =>
+      `https://${sub}.basemaps.cartocdn.com/${STREET_STYLE_PATHS[style]}/{z}/{x}/{y}@2x.png`,
+  );
+
+const streetSourceId = (style: StreetStyle): string => `street-${style}`;
+const streetLayerId = (style: StreetStyle): string => `street-${style}-layer`;
+
+const STREET_STYLE_ICONS: Record<StreetStyle, typeof MapIcon> = {
+  voyager: MapIcon,
+  positron: Sun,
+  dark: Moon,
+};
 
 // Esri World Imagery: free, keyless high-resolution aerial imagery. Used as a
 // satellite alternative to Google (whose tiles require a paid, licensed API).
@@ -81,6 +106,11 @@ export default function Map({
   const [baseLayer, setBaseLayerState] = useState<BaseLayer>(() => getBaseLayer());
   const baseLayerRef = useRef<BaseLayer>(baseLayer);
   baseLayerRef.current = baseLayer;
+  const [streetStyle, setStreetStyleState] = useState<StreetStyle>(() => getStreetStyle());
+  const streetStyleRef = useRef<StreetStyle>(streetStyle);
+  streetStyleRef.current = streetStyle;
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const styleMenuRef = useRef<HTMLDivElement>(null);
 
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
@@ -90,6 +120,36 @@ export default function Map({
     if (map.current || !mapContainer.current) return;
 
     const initialBase = baseLayerRef.current;
+    const initialStyle = streetStyleRef.current;
+
+    // One raster source + layer per street style. Only the chosen street style's
+    // layer is visible (and only while the street base is selected); switching
+    // styles just toggles layer visibility, which keeps all overlays intact and
+    // avoids tearing down/rebuilding the map.
+    const streetSources = Object.fromEntries(
+      STREET_STYLES.map((style) => [
+        streetSourceId(style),
+        {
+          type: "raster" as const,
+          tiles: streetTileUrls(style),
+          tileSize: 256,
+          attribution: STREET_ATTRIBUTION,
+        },
+      ]),
+    );
+    const streetLayers = STREET_STYLES.map((style) => ({
+      id: streetLayerId(style),
+      type: "raster" as const,
+      source: streetSourceId(style),
+      minzoom: 0,
+      maxzoom: 22,
+      layout: {
+        visibility:
+          initialBase === "map" && style === initialStyle
+            ? ("visible" as const)
+            : ("none" as const),
+      },
+    }));
 
     try {
       map.current = new maplibregl.Map({
@@ -101,12 +161,7 @@ export default function Map({
           // no text. Serves "Open Sans Regular" used by the node-number layer.
           glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
           sources: {
-            "raster-tiles": {
-              type: "raster",
-              tiles: STREET_TILE_URLS,
-              tileSize: 256,
-              attribution: STREET_ATTRIBUTION
-            },
+            ...streetSources,
             "satellite-tiles": {
               type: "raster",
               tiles: SATELLITE_TILE_URLS,
@@ -120,14 +175,7 @@ export default function Map({
             }
           },
           layers: [
-            {
-              id: "simple-tiles",
-              type: "raster",
-              source: "raster-tiles",
-              minzoom: 0,
-              maxzoom: 22,
-              layout: { visibility: initialBase === "map" ? "visible" : "none" }
-            },
+            ...streetLayers,
             {
               id: "satellite-tiles-layer",
               type: "raster",
@@ -370,7 +418,13 @@ export default function Map({
     const m = map.current;
     const apply = () => {
       const showMap = baseLayer === "map";
-      m.setLayoutProperty("simple-tiles", "visibility", showMap ? "visible" : "none");
+      STREET_STYLES.forEach((style) => {
+        m.setLayoutProperty(
+          streetLayerId(style),
+          "visibility",
+          showMap && style === streetStyle ? "visible" : "none",
+        );
+      });
       m.setLayoutProperty("satellite-tiles-layer", "visibility", showMap ? "none" : "visible");
       m.setLayoutProperty("satellite-labels-layer", "visibility", showMap ? "none" : "visible");
     };
@@ -382,12 +436,33 @@ export default function Map({
     return () => {
       m.off("load", apply);
     };
-  }, [baseLayer]);
+  }, [baseLayer, streetStyle]);
 
   const toggleBaseLayer = useCallback((next: BaseLayer) => {
     setBaseLayerState(next);
     setBaseLayer(next);
   }, []);
+
+  const chooseStreetStyle = useCallback((next: StreetStyle) => {
+    setStreetStyleState(next);
+    setStreetStyle(next);
+    setBaseLayerState("map");
+    setBaseLayer("map");
+    setStyleMenuOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!styleMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (styleMenuRef.current && !styleMenuRef.current.contains(e.target as Node)) {
+        setStyleMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [styleMenuOpen]);
 
   useEffect(() => {
     if (!map.current || !map.current.isStyleLoaded()) return;
@@ -543,35 +618,79 @@ export default function Map({
         </div>
       )}
       {!mapError && (
-        <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-card/95 shadow-md backdrop-blur">
-          <button
-            type="button"
-            onClick={() => toggleBaseLayer("map")}
-            aria-pressed={baseLayer === "map"}
-            title={t("map.streetTitle")}
-            className={
-              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
-              (baseLayer === "map"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent")
-            }
-          >
-            <MapIcon className="h-3.5 w-3.5" /> {t("map.street")}
-          </button>
-          <button
-            type="button"
-            onClick={() => toggleBaseLayer("satellite")}
-            aria-pressed={baseLayer === "satellite"}
-            title={t("map.satelliteTitle")}
-            className={
-              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
-              (baseLayer === "satellite"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent")
-            }
-          >
-            <Satellite className="h-3.5 w-3.5" /> {t("map.satellite")}
-          </button>
+        <div className="absolute right-3 top-3 z-10 flex items-start gap-2">
+          {baseLayer === "map" && (
+            <div className="relative" ref={styleMenuRef}>
+              <button
+                type="button"
+                onClick={() => setStyleMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={styleMenuOpen}
+                title={t("map.styleTitle")}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent"
+              >
+                <Palette className="h-3.5 w-3.5" /> {t(`map.style.${streetStyle}`)}
+              </button>
+              {styleMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-1 flex min-w-[10rem] flex-col overflow-hidden rounded-md border border-border bg-card/95 shadow-md backdrop-blur"
+                >
+                  {STREET_STYLES.map((style) => {
+                    const StyleIcon = STREET_STYLE_ICONS[style];
+                    const active = style === streetStyle;
+                    return (
+                      <button
+                        key={style}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        onClick={() => chooseStreetStyle(style)}
+                        className={
+                          "flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium transition-colors " +
+                          (active
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-accent")
+                        }
+                      >
+                        <StyleIcon className="h-3.5 w-3.5" /> {t(`map.style.${style}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex overflow-hidden rounded-md border border-border bg-card/95 shadow-md backdrop-blur">
+            <button
+              type="button"
+              onClick={() => toggleBaseLayer("map")}
+              aria-pressed={baseLayer === "map"}
+              title={t("map.streetTitle")}
+              className={
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
+                (baseLayer === "map"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent")
+              }
+            >
+              <MapIcon className="h-3.5 w-3.5" /> {t("map.street")}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleBaseLayer("satellite")}
+              aria-pressed={baseLayer === "satellite"}
+              title={t("map.satelliteTitle")}
+              className={
+                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
+                (baseLayer === "satellite"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-accent")
+              }
+            >
+              <Satellite className="h-3.5 w-3.5" /> {t("map.satellite")}
+            </button>
+          </div>
         </div>
       )}
       {mapError && (
