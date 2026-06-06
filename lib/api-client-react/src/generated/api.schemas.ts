@@ -106,10 +106,33 @@ export interface Region {
   zoom: number;
 }
 
+export interface BoundingBox {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
+export interface MunicipalityResult {
+  id: string;
+  name: string;
+  displayName: string;
+  lat: number;
+  lon: number;
+  boundingBox: BoundingBox;
+}
+
 export type GetNetworkParams = {
 /**
  * Bounding box as minLon,minLat,maxLon,maxLat (WGS84).
  */
 bbox: string;
+};
+
+export type GeocodeMunicipalityParams = {
+/**
+ * Municipality name to search for (min 2 characters).
+ */
+q: string;
 };
 

@@ -7,8 +7,11 @@
  */
 
 export * from './apiError';
+export * from './boundingBox';
+export * from './geocodeMunicipalityParams';
 export * from './getNetworkParams';
 export * from './healthStatus';
+export * from './municipalityResult';
 export * from './networkData';
 export * from './networkNode';
 export * from './networkSegment';

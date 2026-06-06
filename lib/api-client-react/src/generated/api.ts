@@ -21,8 +21,10 @@ import type {
 
 import type {
   ApiError,
+  GeocodeMunicipalityParams,
   GetNetworkParams,
   HealthStatus,
+  MunicipalityResult,
   NetworkData,
   Region,
   RoutePlan,
@@ -347,6 +349,92 @@ export function useGetRegions<TData = Awaited<ReturnType<typeof getRegions>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetRegionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGeocodeMunicipalityUrl = (params: GeocodeMunicipalityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/geocode?${stringifiedParams}` : `/api/geocode`
+}
+
+/**
+ * Searches OpenStreetMap (Nominatim) for municipalities in the Netherlands and Belgium matching the query, returning each match's center and bounding box so the map can be fitted to the area.
+
+ * @summary Search for a municipality (gemeente) by name
+ */
+export const geocodeMunicipality = async (params: GeocodeMunicipalityParams, options?: RequestInit): Promise<MunicipalityResult[]> => {
+
+  return customFetch<MunicipalityResult[]>(getGeocodeMunicipalityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGeocodeMunicipalityQueryKey = (params?: GeocodeMunicipalityParams,) => {
+    return [
+    `/api/geocode`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGeocodeMunicipalityQueryOptions = <TData = Awaited<ReturnType<typeof geocodeMunicipality>>, TError = ErrorType<ApiError>>(params: GeocodeMunicipalityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof geocodeMunicipality>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGeocodeMunicipalityQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof geocodeMunicipality>>> = ({ signal }) => geocodeMunicipality(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof geocodeMunicipality>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GeocodeMunicipalityQueryResult = NonNullable<Awaited<ReturnType<typeof geocodeMunicipality>>>
+export type GeocodeMunicipalityQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Search for a municipality (gemeente) by name
+ */
+
+export function useGeocodeMunicipality<TData = Awaited<ReturnType<typeof geocodeMunicipality>>, TError = ErrorType<ApiError>>(
+ params: GeocodeMunicipalityParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof geocodeMunicipality>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGeocodeMunicipalityQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

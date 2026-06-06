@@ -84,6 +84,31 @@ export const GetRegionsResponse = zod.array(GetRegionsResponseItem)
 
 
 /**
+ * Searches OpenStreetMap (Nominatim) for municipalities in the Netherlands and Belgium matching the query, returning each match's center and bounding box so the map can be fitted to the area.
+
+ * @summary Search for a municipality (gemeente) by name
+ */
+export const GeocodeMunicipalityQueryParams = zod.object({
+  "q": zod.coerce.string().describe('Municipality name to search for (min 2 characters).')
+})
+
+export const GeocodeMunicipalityResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "displayName": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number(),
+  "boundingBox": zod.object({
+  "south": zod.number(),
+  "north": zod.number(),
+  "west": zod.number(),
+  "east": zod.number()
+})
+})
+export const GeocodeMunicipalityResponse = zod.array(GeocodeMunicipalityResponseItem)
+
+
+/**
  * Returns the saved routes belonging to the current browser, most recently saved first. Returns summaries only (no full geometry).
 
  * @summary List the current user's saved routes

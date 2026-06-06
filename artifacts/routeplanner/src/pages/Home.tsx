@@ -11,13 +11,27 @@ import {
   AlertCircle,
   Save,
   Bookmark,
-  FolderOpen
+  FolderOpen,
+  Search,
+  Star,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMunicipality } from "@/hooks/use-municipality";
+import type { MunicipalityResult } from "@workspace/api-client-react";
 import {
   Dialog,
   DialogContent,
@@ -58,10 +72,41 @@ export default function Home() {
     handleDeleteSavedRoute
   } = useRoutePlanner();
 
+  const {
+    query: municipalityQuery,
+    setQuery: setMunicipalityQuery,
+    results: municipalityResults,
+    isSearching: isSearchingMunicipality,
+    favorite,
+    initialFavorite,
+    saveFavorite,
+    removeFavorite,
+  } = useMunicipality();
+
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [routeName, setRouteName] = useState("");
+  const [municipalityOpen, setMunicipalityOpen] = useState(false);
+  const [fitBounds, setFitBounds] = useState<MunicipalityResult["boundingBox"] | null>(null);
+
+  const initialBounds = initialFavorite?.boundingBox ?? null;
+
+  const handleSelectMunicipality = (m: MunicipalityResult) => {
+    setFitBounds({ ...m.boundingBox });
+    setMunicipalityOpen(false);
+    setMunicipalityQuery("");
+  };
+
+  const handleToggleFavorite = (m: MunicipalityResult) => {
+    if (favorite?.id === m.id) {
+      removeFavorite();
+      toast({ title: "Favorite removed", description: `"${m.name}" is no longer your start area.` });
+    } else {
+      saveFavorite(m);
+      toast({ title: "Favorite set", description: `The map will open at "${m.name}" next time.` });
+    }
+  };
 
   const canSave = !!routePlan && selectedNodes.length >= 2;
 
@@ -140,6 +185,107 @@ export default function Home() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Municipality search */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <Search className="h-4 w-4" /> Find a Municipality
+            </label>
+            <Popover open={municipalityOpen} onOpenChange={setMunicipalityOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-start font-normal text-muted-foreground"
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  Search gemeente (NL/BE)...
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder="Type a municipality name..."
+                    value={municipalityQuery}
+                    onValueChange={setMunicipalityQuery}
+                  />
+                  <CommandList>
+                    {isSearchingMunicipality && (
+                      <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Searching...
+                      </div>
+                    )}
+                    {!isSearchingMunicipality && municipalityQuery.trim().length >= 2 && (
+                      <CommandEmpty>No municipalities found.</CommandEmpty>
+                    )}
+                    {!isSearchingMunicipality && municipalityQuery.trim().length < 2 && (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        Type at least 2 characters to search.
+                      </div>
+                    )}
+                    {municipalityResults.length > 0 && (
+                      <CommandGroup>
+                        {municipalityResults.map((m) => (
+                          <CommandItem
+                            key={m.id}
+                            value={m.id}
+                            onSelect={() => handleSelectMunicipality(m)}
+                            className="flex items-start gap-2"
+                          >
+                            <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium">{m.name}</div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {m.displayName}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              title={favorite?.id === m.id ? "Remove favorite" : "Set as favorite start area"}
+                              className="shrink-0 rounded p-1 hover:bg-accent"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleFavorite(m);
+                              }}
+                            >
+                              <Star
+                                className={
+                                  "h-4 w-4 " +
+                                  (favorite?.id === m.id
+                                    ? "fill-yellow-400 text-yellow-500"
+                                    : "text-muted-foreground")
+                                }
+                              />
+                            </button>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+
+            {favorite && (
+              <div className="flex items-center gap-2 rounded-md bg-secondary/50 px-2 py-1.5 text-xs">
+                <Star className="h-3.5 w-3.5 shrink-0 fill-yellow-400 text-yellow-500" />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                  Opens at <span className="font-medium text-foreground">{favorite.name}</span>
+                </span>
+                <button
+                  type="button"
+                  title="Clear favorite"
+                  className="rounded p-0.5 hover:bg-accent"
+                  onClick={() => {
+                    removeFavorite();
+                    toast({ title: "Favorite cleared", description: "The map will open at the default area." });
+                  }}
+                >
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -346,6 +492,8 @@ export default function Home() {
           onBboxChange={setBbox}
           onNodeClick={handleNodeClick}
           flyToRegion={flyToRegion}
+          initialBounds={initialBounds}
+          fitBounds={fitBounds}
         />
       </div>
 

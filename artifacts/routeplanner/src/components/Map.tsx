@@ -2,6 +2,13 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import { NetworkNode, NetworkSegment } from "@workspace/api-client-react";
 
+interface Bounds {
+  south: number;
+  north: number;
+  west: number;
+  east: number;
+}
+
 interface MapProps {
   nodes: NetworkNode[];
   segments: NetworkSegment[];
@@ -11,6 +18,8 @@ interface MapProps {
   onBboxChange: (bbox: string) => void;
   onNodeClick: (node: NetworkNode) => void;
   flyToRegion?: { lat: number; lon: number; zoom: number } | null;
+  initialBounds?: Bounds | null;
+  fitBounds?: Bounds | null;
 }
 
 const OSM_TILE_URLS = [
@@ -29,7 +38,9 @@ export default function Map({
   importedCoordinates,
   onBboxChange,
   onNodeClick,
-  flyToRegion
+  flyToRegion,
+  initialBounds,
+  fitBounds
 }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -66,8 +77,18 @@ export default function Map({
             }
           ]
         },
-        center: [UTRECHT.lon, UTRECHT.lat],
-        zoom: UTRECHT.zoom
+        ...(initialBounds
+          ? {
+              bounds: [
+                [initialBounds.west, initialBounds.south],
+                [initialBounds.east, initialBounds.north],
+              ] as [[number, number], [number, number]],
+              fitBoundsOptions: { padding: 40 },
+            }
+          : {
+              center: [UTRECHT.lon, UTRECHT.lat] as [number, number],
+              zoom: UTRECHT.zoom,
+            }),
       });
     } catch {
       setMapError(true);
@@ -214,6 +235,28 @@ export default function Map({
       });
     }
   }, [flyToRegion]);
+
+  useEffect(() => {
+    if (!map.current || !fitBounds) return;
+    const m = map.current;
+    const apply = () => {
+      m.fitBounds(
+        [
+          [fitBounds.west, fitBounds.south],
+          [fitBounds.east, fitBounds.north],
+        ],
+        { padding: 40 },
+      );
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [fitBounds]);
 
   useEffect(() => {
     if (!map.current || !map.current.isStyleLoaded()) return;

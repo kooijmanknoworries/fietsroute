@@ -123,6 +123,43 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Region"
+  /geocode:
+    get:
+      operationId: geocodeMunicipality
+      tags: [regions]
+      summary: Search for a municipality (gemeente) by name
+      description: >
+        Searches OpenStreetMap (Nominatim) for municipalities in the
+        Netherlands and Belgium matching the query, returning each match's
+        center and bounding box so the map can be fitted to the area.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: "Municipality name to search for (min 2 characters)."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching municipalities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MunicipalityResult"
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Upstream data source error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /routes:
     get:
       operationId: listSavedRoutes
@@ -433,3 +470,41 @@ components:
         - lat
         - lon
         - zoom
+    BoundingBox:
+      type: object
+      properties:
+        south:
+          type: number
+        north:
+          type: number
+        west:
+          type: number
+        east:
+          type: number
+      required:
+        - south
+        - north
+        - west
+        - east
+    MunicipalityResult:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        displayName:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+        boundingBox:
+          $ref: "#/components/schemas/BoundingBox"
+      required:
+        - id
+        - name
+        - displayName
+        - lat
+        - lon
+        - boundingBox
