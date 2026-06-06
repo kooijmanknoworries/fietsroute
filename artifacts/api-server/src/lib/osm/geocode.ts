@@ -239,6 +239,27 @@ function toRankedResults(items: NominatimItem[]): MunicipalityResult[] {
   return results;
 }
 
+// Returns true when a municipality search is already served from cache (memory
+// or Postgres) so the warmer can skip it without hitting Nominatim. Mirrors the
+// skip behavior of the Overpass region warmer.
+export async function isMunicipalityCached(query: string): Promise<boolean> {
+  const normalized = normalizeMunicipalityQuery(query);
+  const cacheKey = normalized.toLowerCase();
+  const now = Date.now();
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expires > now) {
+    return true;
+  }
+
+  const persisted = await readPersistentCache(cacheKey, now);
+  if (persisted) {
+    cache.set(cacheKey, { expires: now + CACHE_TTL_MS, value: persisted });
+    return true;
+  }
+
+  return false;
+}
+
 export async function searchMunicipalities(
   query: string,
 ): Promise<MunicipalityResult[]> {
@@ -275,4 +296,136 @@ export async function searchMunicipalities(
   cache.set(cacheKey, { expires, value: results });
   await writePersistentCache(cacheKey, results, expires);
   return results;
+}
+
+// Curated list of common Dutch/Belgian municipality names pre-warmed at startup
+// so that even the very first search for one of these feels instant, instead of
+// waiting on the rate-limited Nominatim service.
+export const COMMON_MUNICIPALITIES: string[] = [
+  // Netherlands
+  "Amsterdam",
+  "Rotterdam",
+  "Den Haag",
+  "Utrecht",
+  "Eindhoven",
+  "Groningen",
+  "Tilburg",
+  "Almere",
+  "Breda",
+  "Nijmegen",
+  "Apeldoorn",
+  "Haarlem",
+  "Arnhem",
+  "Enschede",
+  "Amersfoort",
+  "Den Bosch",
+  "Zwolle",
+  "Leiden",
+  "Maastricht",
+  "Dordrecht",
+  "Ede",
+  "Leeuwarden",
+  "Alkmaar",
+  "Emmen",
+  "Delft",
+  "Venlo",
+  "Deventer",
+  // Belgium (Flanders)
+  "Antwerpen",
+  "Gent",
+  "Brugge",
+  "Leuven",
+  "Hasselt",
+  "Mechelen",
+  "Aalst",
+  "Kortrijk",
+  "Oostende",
+  "Genk",
+  "Sint-Niklaas",
+  "Roeselare",
+  "Turnhout",
+];
+
+const WARM_STARTUP_DELAY_MS = 8 * 1000;
+const WARM_INTERVAL_MS = 12 * 60 * 60 * 1000;
+// A single search can fire two Nominatim requests (structured + free-text
+// fallback), so we throttle generously between municipalities to stay within
+// Nominatim's ~1 request/second usage policy.
+const WARM_THROTTLE_MS = 1500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let geocodeWarming = false;
+
+export async function warmMunicipalities(): Promise<void> {
+  if (geocodeWarming) {
+    logger.info("Geocode warming already in progress, skipping this run");
+    return;
+  }
+  geocodeWarming = true;
+
+  let warmed = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  logger.info(
+    { count: COMMON_MUNICIPALITIES.length },
+    "Starting geocode warming run",
+  );
+
+  try {
+    for (const name of COMMON_MUNICIPALITIES) {
+      let alreadyCached: boolean;
+      try {
+        alreadyCached = await isMunicipalityCached(name);
+      } catch (err) {
+        failed++;
+        logger.warn(
+          { err, name },
+          "Geocode cache lookup failed, skipping municipality",
+        );
+        continue;
+      }
+
+      if (alreadyCached) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        await searchMunicipalities(name);
+        warmed++;
+        logger.info({ name }, "Warmed municipality geocode cache");
+      } catch (err) {
+        failed++;
+        logger.warn(
+          { err, name },
+          "Failed to warm municipality geocode cache",
+        );
+      }
+
+      await sleep(WARM_THROTTLE_MS);
+    }
+  } finally {
+    geocodeWarming = false;
+  }
+
+  logger.info({ warmed, skipped, failed }, "Geocode warming run complete");
+}
+
+export function startGeocodeWarming(): void {
+  if (process.env["DISABLE_CACHE_WARMING"] === "true") {
+    logger.info("Geocode warming disabled via DISABLE_CACHE_WARMING");
+    return;
+  }
+
+  setTimeout(() => {
+    void warmMunicipalities();
+  }, WARM_STARTUP_DELAY_MS);
+
+  setInterval(() => {
+    void warmMunicipalities();
+  }, WARM_INTERVAL_MS).unref();
 }

@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startCacheSweeper } from "./lib/osm/overpass";
-import { startGeocodeCacheSweeper } from "./lib/osm/geocode";
+import { startGeocodeCacheSweeper, startGeocodeWarming } from "./lib/osm/geocode";
 import { startCacheWarming } from "./lib/osm/warmer";
 import { startSavedRoutesSweeper } from "./lib/saved-routes-sweeper";
 
@@ -29,5 +29,6 @@ app.listen(port, (err) => {
   startCacheSweeper();
   startGeocodeCacheSweeper();
   startCacheWarming();
+  startGeocodeWarming();
   startSavedRoutesSweeper();
 });

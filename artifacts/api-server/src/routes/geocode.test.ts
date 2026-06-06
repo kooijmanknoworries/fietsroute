@@ -1,7 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { inArray } from "drizzle-orm";
+import { db, geocodeCacheTable } from "@workspace/db";
 import geocodeRouter from "./geocode";
+
+// The geocode service reads its persistent Postgres cache before honoring the
+// mocked Nominatim fetch, so a previously cached/warmed entry (e.g. from the
+// startup municipality warmer) would otherwise shadow the mocked response.
+// Clear the keys these tests exercise so each run is deterministic.
+const TEST_CACHE_KEYS = ["utrecht", "geocoder-failure-town"];
+
+async function clearGeocodeCache(): Promise<void> {
+  await db
+    .delete(geocodeCacheTable)
+    .where(inArray(geocodeCacheTable.key, TEST_CACHE_KEYS));
+}
 
 function buildApp(): Express {
   const app = express();
@@ -28,12 +42,14 @@ function mockNominatimOnce(items: unknown[]): void {
 }
 
 describe("GET /api/geocode", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    await clearGeocodeCache();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await clearGeocodeCache();
   });
 
   it("returns 400 when q is missing", async () => {

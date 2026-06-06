@@ -8,3 +8,4 @@
 - [Orval schema naming](orval-schema-naming.md) — response component schemas must not be named `<OperationId>Response` or codegen double-exports and tsc fails TS2308; use `...Result`.
 - [API server has no hot reload](api-server-no-hot-reload.md) — api-server dev is `build && start`; restart the workflow after editing server code or tests run against the stale build.
 - [MapLibre attribution gating](maplibre-attribution.md) — AttributionControl shows a source's attribution only while a layer using it is visible; toggling layer visibility:none drops it (verified v4.7.1).
+- [Geocode/persistent cache test isolation](geocode-cache-test-isolation.md) — searchMunicipalities reads Postgres cache before honoring mocked fetch; tests must clear geocode_cache rows for their keys or warmed/real data shadows the mock.
