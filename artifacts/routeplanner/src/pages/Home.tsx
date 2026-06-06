@@ -207,6 +207,14 @@ export default function Home() {
         const text = event.target?.result as string;
         if (text) {
           const coords = parseGPX(text);
+          if (coords.length === 0) {
+            toast({
+              title: "Couldn't import this file",
+              description: "No valid track points found in this file.",
+              variant: "destructive",
+            });
+            return;
+          }
           handleImportRoute(coords);
         }
       };
