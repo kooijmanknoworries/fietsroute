@@ -1,3 +1,5 @@
+import type { Bbox } from "./overpass";
+
 export interface Region {
   id: string;
   name: string;
@@ -5,6 +7,18 @@ export interface Region {
   lat: number;
   lon: number;
   zoom: number;
+}
+
+const REGION_LAT_HALF_SPAN = 0.06;
+const REGION_LON_HALF_SPAN = 0.09;
+
+export function regionBbox(region: Region): Bbox {
+  return {
+    minLat: region.lat - REGION_LAT_HALF_SPAN,
+    maxLat: region.lat + REGION_LAT_HALF_SPAN,
+    minLon: region.lon - REGION_LON_HALF_SPAN,
+    maxLon: region.lon + REGION_LON_HALF_SPAN,
+  };
 }
 
 export const REGIONS: Region[] = [

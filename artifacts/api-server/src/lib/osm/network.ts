@@ -1,4 +1,4 @@
-import { fetchOverpass, type Bbox } from "./overpass";
+import { fetchOverpassTiles, type Bbox } from "./overpass";
 
 export interface NetworkNode {
   id: string;
@@ -27,7 +27,7 @@ export async function getNetworkData(bbox: Bbox): Promise<NetworkData> {
     return { nodes: [], segments: [], truncated: true };
   }
 
-  const { nodes, ways } = await fetchOverpass(bbox);
+  const { nodes, ways } = await fetchOverpassTiles(bbox);
 
   const resultNodes: NetworkNode[] = [];
   for (const n of nodes.values()) {

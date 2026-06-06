@@ -69,6 +69,19 @@ function deserialize(s: SerializedResult): OverpassResult {
   return { nodes, ways: s.ways };
 }
 
+export async function getPersistentCacheExpiry(
+  bbox: Bbox,
+): Promise<number | null> {
+  const key = cacheKey(bbox);
+  const rows = await db
+    .select({ expiresAt: overpassCacheTable.expiresAt })
+    .from(overpassCacheTable)
+    .where(eq(overpassCacheTable.key, key))
+    .limit(1);
+  const row = rows[0];
+  return row ? row.expiresAt.getTime() : null;
+}
+
 async function readPersistentCache(
   key: string,
   now: number,
@@ -160,19 +173,28 @@ async function requestOverpass(query: string): Promise<OverpassElement[]> {
     : new Error("All Overpass endpoints failed");
 }
 
-export async function fetchOverpass(bbox: Bbox): Promise<OverpassResult> {
+export interface FetchOverpassOptions {
+  forceRefresh?: boolean;
+}
+
+export async function fetchOverpass(
+  bbox: Bbox,
+  options: FetchOverpassOptions = {},
+): Promise<OverpassResult> {
   const key = cacheKey(bbox);
   const now = Date.now();
 
-  const cached = cache.get(key);
-  if (cached && cached.expires > now) {
-    return cached.data;
-  }
+  if (!options.forceRefresh) {
+    const cached = cache.get(key);
+    if (cached && cached.expires > now) {
+      return cached.data;
+    }
 
-  const persisted = await readPersistentCache(key, now);
-  if (persisted) {
-    cache.set(key, { data: persisted, expires: now + CACHE_TTL_MS });
-    return persisted;
+    const persisted = await readPersistentCache(key, now);
+    if (persisted) {
+      cache.set(key, { data: persisted, expires: now + CACHE_TTL_MS });
+      return persisted;
+    }
   }
 
   const elements = await requestOverpass(buildQuery(bbox));
@@ -224,6 +246,58 @@ export function startCacheSweeper(): NodeJS.Timeout {
   }, SWEEP_INTERVAL_MS);
   timer.unref();
   return timer;
+}
+
+export const TILE_SIZE_DEG = 0.1;
+
+function tileBbox(ix: number, iy: number): Bbox {
+  const round = (n: number) => Number(n.toFixed(3));
+  return {
+    minLon: round(ix * TILE_SIZE_DEG),
+    minLat: round(iy * TILE_SIZE_DEG),
+    maxLon: round((ix + 1) * TILE_SIZE_DEG),
+    maxLat: round((iy + 1) * TILE_SIZE_DEG),
+  };
+}
+
+export function getTilesForBbox(bbox: Bbox): Bbox[] {
+  const eps = 1e-9;
+  const ixMin = Math.floor(bbox.minLon / TILE_SIZE_DEG);
+  const ixMax = Math.floor((bbox.maxLon - eps) / TILE_SIZE_DEG);
+  const iyMin = Math.floor(bbox.minLat / TILE_SIZE_DEG);
+  const iyMax = Math.floor((bbox.maxLat - eps) / TILE_SIZE_DEG);
+  const tiles: Bbox[] = [];
+  for (let ix = ixMin; ix <= ixMax; ix++) {
+    for (let iy = iyMin; iy <= iyMax; iy++) {
+      tiles.push(tileBbox(ix, iy));
+    }
+  }
+  return tiles;
+}
+
+export async function fetchOverpassTiles(
+  bbox: Bbox,
+  options: FetchOverpassOptions = {},
+): Promise<OverpassResult> {
+  const tiles = getTilesForBbox(bbox);
+  const nodes = new Map<number, OverpassNode>();
+  const ways: OverpassWay[] = [];
+  const seenWays = new Set<number>();
+
+  for (const tile of tiles) {
+    const result = await fetchOverpass(tile, options);
+    for (const [id, node] of result.nodes) {
+      if (!nodes.has(id)) nodes.set(id, node);
+    }
+    for (const way of result.ways) {
+      if (!seenWays.has(way.id)) {
+        seenWays.add(way.id);
+        ways.push(way);
+      }
+    }
+  }
+
+  return { nodes, ways };
 }
 
 export function haversineMeters(
