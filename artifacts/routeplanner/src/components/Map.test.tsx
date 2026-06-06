@@ -45,12 +45,14 @@ vi.mock("maplibre-gl", () => {
     addSource() {}
     addLayer() {}
     setFeatureState() {}
+    setLayoutProperty() {}
     remove() {}
   }
   return { default: { Map: FakeMap } };
 });
 
 import Map from "./Map";
+import { I18nProvider } from "@/lib/i18n";
 
 const UTRECHT_AREA = {
   south: 52.0,
@@ -80,7 +82,11 @@ describe("Map", () => {
   });
 
   it("opens at the favorite area's bounds when initialBounds is provided", () => {
-    render(<Map {...baseProps} initialBounds={UTRECHT_AREA} fitBounds={null} />);
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={UTRECHT_AREA} fitBounds={null} />
+      </I18nProvider>,
+    );
 
     expect(constructorCalls).toHaveLength(1);
     const opts = constructorCalls[0];
@@ -92,7 +98,11 @@ describe("Map", () => {
   });
 
   it("falls back to the Utrecht center when there is no favorite area", () => {
-    render(<Map {...baseProps} initialBounds={null} fitBounds={null} />);
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
 
     expect(constructorCalls).toHaveLength(1);
     const opts = constructorCalls[0];
@@ -103,7 +113,11 @@ describe("Map", () => {
 
   it("fits the map to a selected municipality's bounds via fitBounds", () => {
     const selected = { south: 51.8, north: 52.0, west: 4.4, east: 4.6 };
-    render(<Map {...baseProps} initialBounds={null} fitBounds={selected} />);
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={selected} />
+      </I18nProvider>,
+    );
 
     expect(fitBoundsCalls).toHaveLength(1);
     expect(fitBoundsCalls[0].bounds).toEqual([
