@@ -1,0 +1,115 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render } from "@testing-library/react";
+
+interface MapOptions {
+  bounds?: [[number, number], [number, number]];
+  center?: [number, number];
+  zoom?: number;
+  fitBoundsOptions?: unknown;
+}
+
+const { constructorCalls, fitBoundsCalls } = vi.hoisted(() => ({
+  constructorCalls: [] as MapOptions[],
+  fitBoundsCalls: [] as Array<{ bounds: unknown; options: unknown }>,
+}));
+
+vi.mock("maplibre-gl", () => {
+  class FakeMap {
+    constructor(options: MapOptions) {
+      constructorCalls.push(options);
+    }
+    on() {}
+    once() {}
+    off() {}
+    isStyleLoaded() {
+      return true;
+    }
+    fitBounds(bounds: unknown, options: unknown) {
+      fitBoundsCalls.push({ bounds, options });
+    }
+    flyTo() {}
+    getBounds() {
+      return {
+        getWest: () => 0,
+        getSouth: () => 0,
+        getEast: () => 0,
+        getNorth: () => 0,
+      };
+    }
+    getCanvas() {
+      return { style: {} };
+    }
+    getSource() {
+      return undefined;
+    }
+    addSource() {}
+    addLayer() {}
+    setFeatureState() {}
+    remove() {}
+  }
+  return { default: { Map: FakeMap } };
+});
+
+import Map from "./Map";
+
+const UTRECHT_AREA = {
+  south: 52.0,
+  north: 52.15,
+  west: 5.0,
+  east: 5.25,
+};
+
+const baseProps = {
+  nodes: [],
+  segments: [],
+  selectedNodes: [],
+  routeCoordinates: null,
+  importedCoordinates: null,
+  onBboxChange: () => {},
+  onNodeClick: () => {},
+};
+
+describe("Map", () => {
+  beforeEach(() => {
+    constructorCalls.length = 0;
+    fitBoundsCalls.length = 0;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("opens at the favorite area's bounds when initialBounds is provided", () => {
+    render(<Map {...baseProps} initialBounds={UTRECHT_AREA} fitBounds={null} />);
+
+    expect(constructorCalls).toHaveLength(1);
+    const opts = constructorCalls[0];
+    expect(opts.bounds).toEqual([
+      [UTRECHT_AREA.west, UTRECHT_AREA.south],
+      [UTRECHT_AREA.east, UTRECHT_AREA.north],
+    ]);
+    expect(opts.center).toBeUndefined();
+  });
+
+  it("falls back to the Utrecht center when there is no favorite area", () => {
+    render(<Map {...baseProps} initialBounds={null} fitBounds={null} />);
+
+    expect(constructorCalls).toHaveLength(1);
+    const opts = constructorCalls[0];
+    expect(opts.bounds).toBeUndefined();
+    expect(opts.center).toEqual([5.1214, 52.0907]);
+    expect(opts.zoom).toBe(13);
+  });
+
+  it("fits the map to a selected municipality's bounds via fitBounds", () => {
+    const selected = { south: 51.8, north: 52.0, west: 4.4, east: 4.6 };
+    render(<Map {...baseProps} initialBounds={null} fitBounds={selected} />);
+
+    expect(fitBoundsCalls).toHaveLength(1);
+    expect(fitBoundsCalls[0].bounds).toEqual([
+      [selected.west, selected.south],
+      [selected.east, selected.north],
+    ]);
+    expect(fitBoundsCalls[0].options).toEqual({ padding: 40 });
+  });
+});
