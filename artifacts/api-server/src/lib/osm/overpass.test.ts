@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { inArray } from "drizzle-orm";
 import { db, overpassCacheTable } from "@workspace/db";
-import { type Bbox, fetchOverpass } from "./overpass";
+import { type Bbox, fetchOverpass, sweepExpiredCache } from "./overpass";
 
 // fetchOverpass keys its in-memory L1 cache and the persistent Postgres cache by
 // the bbox rounded to 3 decimals (see cacheKey). The L1 cache is module-level
@@ -131,5 +131,75 @@ describe("fetchOverpass caching", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect([...result.nodes.keys()]).toEqual([FRESH_NODE_ID]);
     expect(result.nodes.has(STALE_NODE_ID)).toBe(false);
+  });
+});
+
+// Distinct keys from the fetchOverpass suite above (8.x/48.x vs 9.x/49.x) so the
+// two suites' seeded rows never collide. sweepExpiredCache deletes by expiry, not
+// by key, so the test cleans up its own rows before and after.
+const SWEEP_EXPIRED_KEY_A = "8.000,48.000,8.100,48.100";
+const SWEEP_EXPIRED_KEY_B = "8.200,48.200,8.300,48.300";
+const SWEEP_VALID_KEY = "8.400,48.400,8.500,48.500";
+const SWEEP_KEYS = [SWEEP_EXPIRED_KEY_A, SWEEP_EXPIRED_KEY_B, SWEEP_VALID_KEY];
+
+async function clearSweepKeys(): Promise<void> {
+  await db
+    .delete(overpassCacheTable)
+    .where(inArray(overpassCacheTable.key, SWEEP_KEYS));
+}
+
+async function remainingSweepKeys(): Promise<string[]> {
+  const rows = await db
+    .select({ key: overpassCacheTable.key })
+    .from(overpassCacheTable)
+    .where(inArray(overpassCacheTable.key, SWEEP_KEYS));
+  return rows.map((r) => r.key).sort();
+}
+
+describe("sweepExpiredCache", () => {
+  beforeEach(async () => {
+    await clearSweepKeys();
+  });
+
+  afterEach(async () => {
+    await clearSweepKeys();
+  });
+
+  afterAll(async () => {
+    await clearSweepKeys();
+  });
+
+  it("removes only expired rows and reports the correct removed count", async () => {
+    // Clear any expired rows that leaked from other suites so the returned count
+    // reflects exactly the rows seeded here (file parallelism is disabled, so no
+    // other suite races us between this sweep and the assertion).
+    await sweepExpiredCache();
+
+    const past = new Date(Date.now() - 60 * 60 * 1000);
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    await seedPersistent(SWEEP_EXPIRED_KEY_A, STALE_DATA, past);
+    await seedPersistent(SWEEP_EXPIRED_KEY_B, STALE_DATA, past);
+    await seedPersistent(SWEEP_VALID_KEY, STALE_DATA, future);
+
+    const removed = await sweepExpiredCache();
+
+    // Exactly the two expired rows were deleted; the still-valid row survives.
+    expect(removed).toBe(2);
+    expect(await remainingSweepKeys()).toEqual([SWEEP_VALID_KEY]);
+  });
+
+  it("removes nothing when every row is still valid", async () => {
+    await sweepExpiredCache();
+
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    await seedPersistent(SWEEP_EXPIRED_KEY_A, STALE_DATA, future);
+    await seedPersistent(SWEEP_VALID_KEY, STALE_DATA, future);
+
+    const removed = await sweepExpiredCache();
+
+    expect(removed).toBe(0);
+    expect(await remainingSweepKeys()).toEqual(
+      [SWEEP_EXPIRED_KEY_A, SWEEP_VALID_KEY].sort(),
+    );
   });
 });
