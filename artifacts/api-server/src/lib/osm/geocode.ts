@@ -1,3 +1,7 @@
+import { eq, lt } from "drizzle-orm";
+import { db, geocodeCacheTable } from "@workspace/db";
+import { logger } from "../logger";
+
 export interface BoundingBox {
   south: number;
   north: number;
@@ -23,6 +27,82 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
+
+async function readPersistentCache(
+  key: string,
+  now: number,
+): Promise<MunicipalityResult[] | null> {
+  try {
+    const rows = await db
+      .select()
+      .from(geocodeCacheTable)
+      .where(eq(geocodeCacheTable.key, key))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return null;
+    if (row.expiresAt.getTime() <= now) {
+      void db
+        .delete(geocodeCacheTable)
+        .where(eq(geocodeCacheTable.key, key))
+        .catch((err) =>
+          logger.warn({ err, key }, "Failed to delete expired geocode cache row"),
+        );
+      return null;
+    }
+    return row.data as MunicipalityResult[];
+  } catch (err) {
+    logger.warn({ err, key }, "Persistent geocode cache read failed");
+    return null;
+  }
+}
+
+async function writePersistentCache(
+  key: string,
+  data: MunicipalityResult[],
+  expires: number,
+): Promise<void> {
+  try {
+    const expiresAt = new Date(expires);
+    await db
+      .insert(geocodeCacheTable)
+      .values({ key, data, expiresAt })
+      .onConflictDoUpdate({
+        target: geocodeCacheTable.key,
+        set: { data, expiresAt, createdAt: new Date() },
+      });
+  } catch (err) {
+    logger.warn({ err, key }, "Persistent geocode cache write failed");
+  }
+}
+
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+export async function sweepExpiredGeocodeCache(): Promise<number> {
+  try {
+    const result = await db
+      .delete(geocodeCacheTable)
+      .where(lt(geocodeCacheTable.expiresAt, new Date()));
+    const removed = result.rowCount ?? 0;
+    if (removed > 0) {
+      logger.info({ removed }, "Swept expired geocode cache rows");
+    } else {
+      logger.debug("Geocode cache sweep found no expired rows");
+    }
+    return removed;
+  } catch (err) {
+    logger.warn({ err }, "Geocode cache sweep failed");
+    return 0;
+  }
+}
+
+export function startGeocodeCacheSweeper(): NodeJS.Timeout {
+  void sweepExpiredGeocodeCache();
+  const timer = setInterval(() => {
+    void sweepExpiredGeocodeCache();
+  }, SWEEP_INTERVAL_MS);
+  timer.unref();
+  return timer;
+}
 
 interface NominatimItem {
   osm_type?: string;
@@ -148,9 +228,16 @@ export async function searchMunicipalities(
 ): Promise<MunicipalityResult[]> {
   const normalized = normalizeMunicipalityQuery(query);
   const cacheKey = normalized.toLowerCase();
+  const now = Date.now();
   const cached = cache.get(cacheKey);
-  if (cached && cached.expires > Date.now()) {
+  if (cached && cached.expires > now) {
     return cached.value;
+  }
+
+  const persisted = await readPersistentCache(cacheKey, now);
+  if (persisted) {
+    cache.set(cacheKey, { expires: now + CACHE_TTL_MS, value: persisted });
+    return persisted;
   }
 
   // Structured `city` search reliably returns administrative gemeentes even for
@@ -168,6 +255,8 @@ export async function searchMunicipalities(
     );
   }
 
-  cache.set(cacheKey, { expires: Date.now() + CACHE_TTL_MS, value: results });
+  const expires = Date.now() + CACHE_TTL_MS;
+  cache.set(cacheKey, { expires, value: results });
+  await writePersistentCache(cacheKey, results, expires);
   return results;
 }
