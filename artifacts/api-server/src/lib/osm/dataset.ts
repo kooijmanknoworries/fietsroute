@@ -1,0 +1,326 @@
+import { and, gte, lte, sql } from "drizzle-orm";
+import { db, networkNodesTable, networkSegmentsTable } from "@workspace/db";
+import { logger } from "../logger";
+import { fetchOverpassUncached, type Bbox } from "./overpass";
+import type { NetworkData, NetworkNode, NetworkSegment } from "./network";
+
+// Bounding box covering the Netherlands + Belgium. The importer walks this in
+// fixed chunks and pulls the full cycling node network (rcn) into our own
+// tables so the map can be served locally instead of hitting Overpass per pan.
+const NL_BE_BBOX: Bbox = {
+  minLat: 49.4,
+  maxLat: 53.75,
+  minLon: 2.45,
+  maxLon: 7.3,
+};
+
+// Per-query chunk size, in degrees. Small enough that a single rcn query stays
+// well within Overpass timeouts, large enough that the whole region is a few
+// dozen requests rather than thousands of tiny tiles.
+const CHUNK_DEG = 0.5;
+
+// Politeness gap between chunk queries so the import never hammers Overpass.
+const IMPORT_THROTTLE_MS = 1200;
+
+// Rows per insert statement when upserting a chunk's results.
+const INSERT_BATCH = 500;
+
+// Re-import the whole dataset when the freshest row is older than this.
+const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Delay before the first import attempt after boot, so startup isn't blocked
+// and the server is already serving (falling back to live tiles) meanwhile.
+const STARTUP_DELAY_MS = 15 * 1000;
+
+// How often to re-check staleness and refresh if needed.
+const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+// Cache the (cheap) readiness probe so we don't hit the DB on every request.
+const READY_CACHE_MS = 30 * 1000;
+
+// The dataset can serve a much larger viewport than the live per-tile path
+// because it's a single indexed bbox query. Still capped so a whole-country
+// view doesn't return tens of thousands of nodes.
+export const DATASET_MAX_AREA_DEG2 = 4.0;
+
+// Above this many nodes in view we report truncation rather than shipping a
+// huge payload the client can't usefully render.
+const DATASET_NODE_CAP = 8000;
+
+function round(n: number): number {
+  return Number(n.toFixed(4));
+}
+
+function chunkBboxes(): Bbox[] {
+  const out: Bbox[] = [];
+  for (let lat = NL_BE_BBOX.minLat; lat < NL_BE_BBOX.maxLat; lat += CHUNK_DEG) {
+    for (let lon = NL_BE_BBOX.minLon; lon < NL_BE_BBOX.maxLon; lon += CHUNK_DEG) {
+      out.push({
+        minLat: round(lat),
+        maxLat: round(Math.min(lat + CHUNK_DEG, NL_BE_BBOX.maxLat)),
+        minLon: round(lon),
+        maxLon: round(Math.min(lon + CHUNK_DEG, NL_BE_BBOX.maxLon)),
+      });
+    }
+  }
+  return out;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let readyCache: { ready: boolean; at: number } | null = null;
+
+// Whether the local dataset has been populated. Cached briefly so the per-pan
+// network endpoint doesn't issue an extra DB round-trip on every request.
+export async function isDatasetReady(): Promise<boolean> {
+  const now = Date.now();
+  if (readyCache && now - readyCache.at < READY_CACHE_MS) {
+    return readyCache.ready;
+  }
+  try {
+    const rows = await db
+      .select({ one: sql<number>`1` })
+      .from(networkNodesTable)
+      .limit(1);
+    const ready = rows.length > 0;
+    readyCache = { ready, at: now };
+    return ready;
+  } catch (err) {
+    logger.warn({ err }, "Dataset readiness check failed");
+    return false;
+  }
+}
+
+// Serve a viewport from the local dataset. Returns truncated when the viewport
+// holds more nodes than the cap. The caller checks the area cap beforehand.
+export async function getNetworkFromDataset(bbox: Bbox): Promise<NetworkData> {
+  const nodeRows = await db
+    .select()
+    .from(networkNodesTable)
+    .where(
+      and(
+        gte(networkNodesTable.lat, bbox.minLat),
+        lte(networkNodesTable.lat, bbox.maxLat),
+        gte(networkNodesTable.lon, bbox.minLon),
+        lte(networkNodesTable.lon, bbox.maxLon),
+      ),
+    )
+    .limit(DATASET_NODE_CAP + 1);
+
+  if (nodeRows.length > DATASET_NODE_CAP) {
+    return { nodes: [], segments: [], truncated: true };
+  }
+
+  const segRows = await db
+    .select()
+    .from(networkSegmentsTable)
+    .where(
+      and(
+        gte(networkSegmentsTable.maxLat, bbox.minLat),
+        lte(networkSegmentsTable.minLat, bbox.maxLat),
+        gte(networkSegmentsTable.maxLon, bbox.minLon),
+        lte(networkSegmentsTable.minLon, bbox.maxLon),
+      ),
+    );
+
+  const nodes: NetworkNode[] = nodeRows.map((r) => ({
+    id: r.id,
+    ref: r.ref,
+    lat: r.lat,
+    lon: r.lon,
+  }));
+  const segments: NetworkSegment[] = segRows.map((r) => ({
+    id: r.id,
+    coordinates: r.coordinates as number[][],
+  }));
+
+  return { nodes, segments, truncated: false };
+}
+
+interface NodeInsert {
+  id: string;
+  ref: string;
+  lat: number;
+  lon: number;
+}
+
+interface SegmentInsert {
+  id: string;
+  coordinates: number[][];
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
+
+async function upsertNodes(rows: NodeInsert[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+    const batch = rows.slice(i, i + INSERT_BATCH);
+    await db
+      .insert(networkNodesTable)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: networkNodesTable.id,
+        set: {
+          ref: sql`excluded.ref`,
+          lat: sql`excluded.lat`,
+          lon: sql`excluded.lon`,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+}
+
+async function upsertSegments(rows: SegmentInsert[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
+    const batch = rows.slice(i, i + INSERT_BATCH);
+    await db
+      .insert(networkSegmentsTable)
+      .values(batch)
+      .onConflictDoUpdate({
+        target: networkSegmentsTable.id,
+        set: {
+          coordinates: sql`excluded.coordinates`,
+          minLat: sql`excluded.min_lat`,
+          maxLat: sql`excluded.max_lat`,
+          minLon: sql`excluded.min_lon`,
+          maxLon: sql`excluded.max_lon`,
+          updatedAt: sql`now()`,
+        },
+      });
+  }
+}
+
+let importing = false;
+
+// Pull the whole NL+BE network chunk by chunk and upsert it into the dataset
+// tables. Resilient: a failing chunk is logged and skipped so a single Overpass
+// hiccup never aborts the whole import.
+export async function importNetworkDataset(): Promise<void> {
+  if (importing) {
+    logger.info("Network dataset import already in progress, skipping");
+    return;
+  }
+  importing = true;
+
+  const chunks = chunkBboxes();
+  let imported = 0;
+  let failed = 0;
+  let nodeCount = 0;
+  let segCount = 0;
+  logger.info({ chunks: chunks.length }, "Starting network dataset import");
+
+  try {
+    for (const chunk of chunks) {
+      try {
+        const { nodes, ways } = await fetchOverpassUncached(chunk);
+
+        const nodeRows: NodeInsert[] = [];
+        for (const n of nodes.values()) {
+          if (n.rcnRef) {
+            nodeRows.push({
+              id: String(n.id),
+              ref: n.rcnRef,
+              lat: n.lat,
+              lon: n.lon,
+            });
+          }
+        }
+
+        const segRows: SegmentInsert[] = [];
+        for (const way of ways) {
+          const coords: number[][] = [];
+          for (const nid of way.nodes) {
+            const n = nodes.get(nid);
+            if (n) coords.push([n.lon, n.lat]);
+          }
+          if (coords.length < 2) continue;
+          let minLat = Infinity;
+          let maxLat = -Infinity;
+          let minLon = Infinity;
+          let maxLon = -Infinity;
+          for (const [lon, lat] of coords) {
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lon < minLon) minLon = lon;
+            if (lon > maxLon) maxLon = lon;
+          }
+          segRows.push({
+            id: String(way.id),
+            coordinates: coords,
+            minLat,
+            maxLat,
+            minLon,
+            maxLon,
+          });
+        }
+
+        if (nodeRows.length > 0) await upsertNodes(nodeRows);
+        if (segRows.length > 0) await upsertSegments(segRows);
+        imported++;
+        nodeCount += nodeRows.length;
+        segCount += segRows.length;
+      } catch (err) {
+        failed++;
+        logger.warn({ err, chunk }, "Failed to import network chunk");
+      }
+      await sleep(IMPORT_THROTTLE_MS);
+    }
+    // Force the next readiness probe to re-read now that rows exist.
+    readyCache = null;
+  } finally {
+    importing = false;
+  }
+
+  logger.info(
+    { imported, failed, nodeCount, segCount },
+    "Network dataset import complete",
+  );
+}
+
+async function isDatasetStale(): Promise<boolean> {
+  try {
+    const rows = await db
+      .select({ max: sql<string | null>`max(${networkNodesTable.updatedAt})` })
+      .from(networkNodesTable);
+    const max = rows[0]?.max;
+    if (!max) return true;
+    return Date.now() - new Date(max).getTime() > STALE_MS;
+  } catch (err) {
+    logger.warn({ err }, "Dataset staleness check failed");
+    // On error, don't trigger a fresh (heavy) import.
+    return false;
+  }
+}
+
+async function maybeImport(): Promise<void> {
+  try {
+    if (await isDatasetStale()) {
+      await importNetworkDataset();
+    } else {
+      logger.debug("Network dataset is fresh, skipping import");
+    }
+  } catch (err) {
+    logger.warn({ err }, "Network dataset refresh check failed");
+  }
+}
+
+// Schedule the initial import (after a short delay) and a periodic staleness
+// check. Disabled entirely via DISABLE_NETWORK_PRELOAD=true.
+export function startNetworkPreload(): void {
+  if (process.env["DISABLE_NETWORK_PRELOAD"] === "true") {
+    logger.info("Network dataset preload disabled via DISABLE_NETWORK_PRELOAD");
+    return;
+  }
+  const startup = setTimeout(() => {
+    void maybeImport();
+  }, STARTUP_DELAY_MS);
+  startup.unref();
+
+  const interval = setInterval(() => {
+    void maybeImport();
+  }, CHECK_INTERVAL_MS);
+  interval.unref();
+}

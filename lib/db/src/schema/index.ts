@@ -19,4 +19,5 @@
 
 export * from "./geocodeCache";
 export * from "./overpassCache";
+export * from "./networkDataset";
 export * from "./saved-routes";

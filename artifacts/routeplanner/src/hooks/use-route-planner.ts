@@ -196,7 +196,7 @@ export function useRoutePlanner() {
   const tRef = useRef(t);
   tRef.current = t;
   const [bbox, setBbox] = useState<string>("");
-  const [debouncedBbox] = useDebounce(bbox, 500);
+  const [debouncedBbox] = useDebounce(bbox, 250);
 
   // Short rolling history of recent pan directions (newest last), each tagged
   // with the time it was reported. Used to (a) prioritise the latest heading

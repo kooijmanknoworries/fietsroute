@@ -173,6 +173,29 @@ async function requestOverpass(query: string): Promise<OverpassElement[]> {
     : new Error("All Overpass endpoints failed");
 }
 
+function parseElements(elements: OverpassElement[]): OverpassResult {
+  const nodes = new Map<number, OverpassNode>();
+  const ways: OverpassWay[] = [];
+  for (const el of elements) {
+    if (el.type === "node" && el.lat != null && el.lon != null) {
+      const existing = nodes.get(el.id);
+      const rcnRef = el.tags?.["rcn_ref"] ?? existing?.rcnRef;
+      nodes.set(el.id, { id: el.id, lat: el.lat, lon: el.lon, rcnRef });
+    } else if (el.type === "way" && Array.isArray(el.nodes)) {
+      ways.push({ id: el.id, nodes: el.nodes });
+    }
+  }
+  return { nodes, ways };
+}
+
+// Run the network Overpass query for a bbox and parse it, bypassing all caching.
+// Used by the full-region dataset importer, which persists results in its own
+// tables rather than in the short-lived per-tile cache.
+export async function fetchOverpassUncached(bbox: Bbox): Promise<OverpassResult> {
+  const elements = await requestOverpass(buildQuery(bbox));
+  return parseElements(elements);
+}
+
 export interface FetchOverpassOptions {
   forceRefresh?: boolean;
 }
@@ -197,22 +220,7 @@ export async function fetchOverpass(
     }
   }
 
-  const elements = await requestOverpass(buildQuery(bbox));
-
-  const nodes = new Map<number, OverpassNode>();
-  const ways: OverpassWay[] = [];
-
-  for (const el of elements) {
-    if (el.type === "node" && el.lat != null && el.lon != null) {
-      const existing = nodes.get(el.id);
-      const rcnRef = el.tags?.["rcn_ref"] ?? existing?.rcnRef;
-      nodes.set(el.id, { id: el.id, lat: el.lat, lon: el.lon, rcnRef });
-    } else if (el.type === "way" && Array.isArray(el.nodes)) {
-      ways.push({ id: el.id, nodes: el.nodes });
-    }
-  }
-
-  const data: OverpassResult = { nodes, ways };
+  const data = parseElements(await requestOverpass(buildQuery(bbox)));
   const expires = now + CACHE_TTL_MS;
   cache.set(key, { data, expires });
   await writePersistentCache(key, data, expires);

@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startCacheSweeper } from "./lib/osm/overpass";
 import { startGeocodeCacheSweeper, startGeocodeWarming } from "./lib/osm/geocode";
 import { startCacheWarming } from "./lib/osm/warmer";
+import { startNetworkPreload } from "./lib/osm/dataset";
 import { startSavedRoutesSweeper } from "./lib/saved-routes-sweeper";
 
 const rawPort = process.env["PORT"];
@@ -30,5 +31,6 @@ app.listen(port, (err) => {
   startGeocodeCacheSweeper();
   startCacheWarming();
   startGeocodeWarming();
+  startNetworkPreload();
   startSavedRoutesSweeper();
 });

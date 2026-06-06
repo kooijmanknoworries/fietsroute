@@ -1,4 +1,10 @@
 import { fetchOverpassTiles, type Bbox } from "./overpass";
+import {
+  isDatasetReady,
+  getNetworkFromDataset,
+  DATASET_MAX_AREA_DEG2,
+} from "./dataset";
+import { logger } from "../logger";
 
 export interface NetworkNode {
   id: string;
@@ -27,6 +33,29 @@ const MAX_AREA_DEG2 = 0.36;
 export async function getNetworkData(bbox: Bbox): Promise<NetworkData> {
   const area =
     Math.abs(bbox.maxLon - bbox.minLon) * Math.abs(bbox.maxLat - bbox.minLat);
+
+  // Prefer the locally preloaded NL+BE dataset when it's populated: a single
+  // indexed bbox query serves instantly and covers a far larger viewport than
+  // the live per-tile path. Fall back to live Overpass if the dataset is empty
+  // (not yet imported) or the query fails.
+  if (await isDatasetReady()) {
+    if (area > DATASET_MAX_AREA_DEG2) {
+      return { nodes: [], segments: [], truncated: true };
+    }
+    try {
+      const data = await getNetworkFromDataset(bbox);
+      // A populated dataset can still have coverage holes when some import
+      // chunks failed (Overpass is flaky). Treat an empty-but-untruncated
+      // result as a possible hole and fall through to the live path so those
+      // regions still load (and get cached) instead of showing nothing.
+      if (data.truncated || data.nodes.length > 0 || data.segments.length > 0) {
+        return data;
+      }
+    } catch (err) {
+      logger.warn({ err }, "Dataset query failed, falling back to live tiles");
+    }
+  }
+
   if (area > MAX_AREA_DEG2) {
     return { nodes: [], segments: [], truncated: true };
   }
