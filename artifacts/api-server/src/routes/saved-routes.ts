@@ -1,5 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type RequestHandler } from "express";
 import { and, desc, eq } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
 import { db, savedRoutesTable } from "@workspace/db";
 import {
   SaveRouteBody,
@@ -10,19 +11,19 @@ import {
 
 const router: IRouter = Router();
 
-function getOwnerKey(req: { header(name: string): string | undefined }): string | null {
-  const raw = req.header("x-owner-key");
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  return trimmed === "" ? null : trimmed;
-}
-
-router.get("/routes", async (req, res): Promise<void> => {
-  const ownerKey = getOwnerKey(req);
-  if (!ownerKey) {
-    res.status(400).json({ message: "Missing owner key" });
+// Scopes saved routes to the authenticated Clerk user so they follow the user
+// across browsers and devices. The user id is stored in the existing
+// `owner_key` column.
+const requireAuth: RequestHandler = (req, res, next) => {
+  if (!getAuth(req)?.userId) {
+    res.status(401).json({ message: "Unauthorized" });
     return;
   }
+  next();
+};
+
+router.get("/routes", requireAuth, async (req, res): Promise<void> => {
+  const ownerKey = getAuth(req).userId!;
 
   try {
     const rows = await db
@@ -49,12 +50,8 @@ router.get("/routes", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/routes", async (req, res): Promise<void> => {
-  const ownerKey = getOwnerKey(req);
-  if (!ownerKey) {
-    res.status(400).json({ message: "Missing owner key" });
-    return;
-  }
+router.post("/routes", requireAuth, async (req, res): Promise<void> => {
+  const ownerKey = getAuth(req).userId!;
 
   const parsed = SaveRouteBody.safeParse(req.body);
   if (!parsed.success) {
@@ -94,12 +91,9 @@ router.post("/routes", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/routes/:id", async (req, res): Promise<void> => {
-  const ownerKey = getOwnerKey(req);
-  if (!ownerKey) {
-    res.status(400).json({ message: "Missing owner key" });
-    return;
-  }
+router.get("/routes/:id", requireAuth, async (req, res): Promise<void> => {
+  const ownerKey = getAuth(req).userId!;
+  const routeId = String(req.params.id);
 
   try {
     const [row] = await db
@@ -107,7 +101,7 @@ router.get("/routes/:id", async (req, res): Promise<void> => {
       .from(savedRoutesTable)
       .where(
         and(
-          eq(savedRoutesTable.id, req.params.id),
+          eq(savedRoutesTable.id, routeId),
           eq(savedRoutesTable.ownerKey, ownerKey),
         ),
       )
@@ -133,12 +127,9 @@ router.get("/routes/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/routes/:id", async (req, res): Promise<void> => {
-  const ownerKey = getOwnerKey(req);
-  if (!ownerKey) {
-    res.status(400).json({ message: "Missing owner key" });
-    return;
-  }
+router.patch("/routes/:id", requireAuth, async (req, res): Promise<void> => {
+  const ownerKey = getAuth(req).userId!;
+  const routeId = String(req.params.id);
 
   const parsed = UpdateSavedRouteBody.safeParse(req.body);
   if (!parsed.success) {
@@ -158,7 +149,7 @@ router.patch("/routes/:id", async (req, res): Promise<void> => {
       .set({ name })
       .where(
         and(
-          eq(savedRoutesTable.id, req.params.id),
+          eq(savedRoutesTable.id, routeId),
           eq(savedRoutesTable.ownerKey, ownerKey),
         ),
       )
@@ -184,19 +175,16 @@ router.patch("/routes/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/routes/:id", async (req, res): Promise<void> => {
-  const ownerKey = getOwnerKey(req);
-  if (!ownerKey) {
-    res.status(400).json({ message: "Missing owner key" });
-    return;
-  }
+router.delete("/routes/:id", requireAuth, async (req, res): Promise<void> => {
+  const ownerKey = getAuth(req).userId!;
+  const routeId = String(req.params.id);
 
   try {
     const deleted = await db
       .delete(savedRoutesTable)
       .where(
         and(
-          eq(savedRoutesTable.id, req.params.id),
+          eq(savedRoutesTable.id, routeId),
           eq(savedRoutesTable.ownerKey, ownerKey),
         ),
       )

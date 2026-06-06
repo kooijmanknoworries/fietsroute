@@ -17,7 +17,6 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
-let _ownerKey: string | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -43,15 +42,6 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
-}
-
-/**
- * Set an owner key that is attached as an `x-owner-key` header on every
- * request.  Used to scope per-browser resources (e.g. saved routes) without
- * requiring a full authentication flow.  Pass `null` to clear it.
- */
-export function setOwnerKey(key: string | null): void {
-  _ownerKey = key && key.trim() !== "" ? key : null;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -357,11 +347,6 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
-  }
-
-  // Attach the owner key when configured and not explicitly provided.
-  if (_ownerKey && !headers.has("x-owner-key")) {
-    headers.set("x-owner-key", _ownerKey);
   }
 
   // Attach bearer token when an auth getter is configured and no

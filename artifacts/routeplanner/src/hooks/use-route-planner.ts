@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@clerk/react";
 import { useDebounce } from "use-debounce";
 import { 
   useGetNetwork, 
@@ -51,6 +52,7 @@ function viewportForCoordinates(
 
 export function useRoutePlanner() {
   const queryClient = useQueryClient();
+  const { isSignedIn } = useAuth();
   const [bbox, setBbox] = useState<string>("");
   const [debouncedBbox] = useDebounce(bbox, 500);
   
@@ -141,10 +143,12 @@ export function useRoutePlanner() {
     setImportedCoordinates(null);
   }, []);
 
-  // Saved routes
+  // Saved routes — only loaded for signed-in users; they are scoped to the
+  // authenticated account so they follow the user across devices.
   const { data: savedRoutes, isLoading: isLoadingSavedRoutes } = useListSavedRoutes({
     query: {
       queryKey: getListSavedRoutesQueryKey(),
+      enabled: !!isSignedIn,
     },
   });
 

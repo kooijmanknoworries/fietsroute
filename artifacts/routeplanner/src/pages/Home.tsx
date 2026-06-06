@@ -1,4 +1,6 @@
 import React, { useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { Show, useUser, useClerk } from "@clerk/react";
 import { 
   Download, 
   Upload, 
@@ -15,7 +17,9 @@ import {
   Search,
   Star,
   X,
-  Pencil
+  Pencil,
+  LogIn,
+  LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -87,6 +91,10 @@ export default function Home() {
   } = useMunicipality();
 
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [routeName, setRouteName] = useState("");
@@ -182,11 +190,40 @@ export default function Home() {
       {/* Sidebar Panel */}
       <div className="w-full md:w-96 flex-shrink-0 border-b md:border-r border-border bg-card flex flex-col h-1/3 md:h-full z-10 shadow-lg">
         <div className="p-4 bg-primary text-primary-foreground">
-          <div className="flex items-center gap-2 mb-1">
-            <MapIcon className="h-6 w-6" />
-            <h1 className="text-xl font-bold tracking-tight">Fietsrouteplanner</h1>
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2">
+              <MapIcon className="h-6 w-6" />
+              <h1 className="text-xl font-bold tracking-tight">Fietsrouteplanner</h1>
+            </div>
+            <Show when="signed-in">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => signOut({ redirectUrl: basePath || "/" })}
+              >
+                <LogOut className="mr-1.5 h-4 w-4" /> Sign out
+              </Button>
+            </Show>
+            <Show when="signed-out">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => setLocation("/sign-in")}
+              >
+                <LogIn className="mr-1.5 h-4 w-4" /> Sign in
+              </Button>
+            </Show>
           </div>
           <p className="text-sm opacity-90">Plan your cycling adventure in NL/BE</p>
+          <Show when="signed-in">
+            {user?.primaryEmailAddress?.emailAddress && (
+              <p className="text-xs opacity-75 mt-1 truncate">
+                {user.primaryEmailAddress.emailAddress}
+              </p>
+            )}
+          </Show>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -400,14 +437,26 @@ export default function Home() {
                       <span className="text-muted-foreground font-medium">Total Distance:</span>
                       <span className="font-bold text-lg text-foreground">{formatDistance(routePlan.distanceMeters)}</span>
                     </div>
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      disabled={!canSave}
-                      onClick={() => setSaveDialogOpen(true)}
-                    >
-                      <Save className="mr-2 h-4 w-4" /> Save route
-                    </Button>
+                    <Show when="signed-in">
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={!canSave}
+                        onClick={() => setSaveDialogOpen(true)}
+                      >
+                        <Save className="mr-2 h-4 w-4" /> Save route
+                      </Button>
+                    </Show>
+                    <Show when="signed-out">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setLocation("/sign-in")}
+                      >
+                        <LogIn className="mr-2 h-4 w-4" /> Sign in to save
+                      </Button>
+                    </Show>
                   </div>
                 )}
               </div>
@@ -421,63 +470,78 @@ export default function Home() {
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
               <Bookmark className="h-4 w-4" /> Saved Routes
             </h3>
-            {isLoadingSavedRoutes ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading saved routes...
+            <Show when="signed-out">
+              <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center space-y-3">
+                <p>Sign in to save routes and reach them from any device.</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setLocation("/sign-in")}
+                >
+                  <LogIn className="mr-2 h-4 w-4" /> Sign in
+                </Button>
               </div>
-            ) : !savedRoutes || savedRoutes.length === 0 ? (
-              <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
-                No saved routes yet. Plan a route and tap "Save route" to keep it.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {savedRoutes.map((route) => (
-                  <div
-                    key={route.id}
-                    className="flex items-center gap-2 rounded-lg border border-border/60 bg-background p-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{route.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatDistance(route.distanceMeters)} · {route.nodeRefs.length} nodes
+            </Show>
+            <Show when="signed-in">
+              {isLoadingSavedRoutes ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading saved routes...
+                </div>
+              ) : !savedRoutes || savedRoutes.length === 0 ? (
+                <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
+                  No saved routes yet. Plan a route and tap "Save route" to keep it.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {savedRoutes.map((route) => (
+                    <div
+                      key={route.id}
+                      className="flex items-center gap-2 rounded-lg border border-border/60 bg-background p-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{route.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatDistance(route.distanceMeters)} · {route.nodeRefs.length} nodes
+                        </div>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Open route"
+                        disabled={openingRouteId === route.id}
+                        onClick={() => handleOpenSavedRoute(route.id)}
+                      >
+                        {openingRouteId === route.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FolderOpen className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Rename route"
+                        onClick={() => openRenameDialog({ id: route.id, name: route.name })}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        title="Delete route"
+                        onClick={() => handleDeleteSavedRoute(route.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      title="Open route"
-                      disabled={openingRouteId === route.id}
-                      onClick={() => handleOpenSavedRoute(route.id)}
-                    >
-                      {openingRouteId === route.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <FolderOpen className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      title="Rename route"
-                      onClick={() => openRenameDialog({ id: route.id, name: route.name })}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      title="Delete route"
-                      onClick={() => handleDeleteSavedRoute(route.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </Show>
           </div>
 
           <Separator />
