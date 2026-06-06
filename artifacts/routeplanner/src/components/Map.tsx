@@ -214,7 +214,21 @@ export default function Map({
 
       const updateBbox = () => {
         const bounds = m.getBounds();
-        const bboxStr = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+        // Snap the requested area outward to the 0.1° tile grid the server
+        // caches on. Small pans/zooms within the same tiles then produce an
+        // identical bbox string, so the network query is reused from cache
+        // instead of refetching on every map movement.
+        const TILE_SIZE_DEG = 0.1;
+        const snap = (v: number, mode: "floor" | "ceil") => {
+          const tiles = v / TILE_SIZE_DEG;
+          const t = mode === "floor" ? Math.floor(tiles) : Math.ceil(tiles);
+          return Number((t * TILE_SIZE_DEG).toFixed(3));
+        };
+        const west = snap(bounds.getWest(), "floor");
+        const south = snap(bounds.getSouth(), "floor");
+        const east = snap(bounds.getEast(), "ceil");
+        const north = snap(bounds.getNorth(), "ceil");
+        const bboxStr = `${west},${south},${east},${north}`;
         onBboxChange(bboxStr);
       };
 

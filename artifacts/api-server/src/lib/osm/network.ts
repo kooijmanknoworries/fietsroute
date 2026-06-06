@@ -18,7 +18,11 @@ export interface NetworkData {
   truncated: boolean;
 }
 
-const MAX_AREA_DEG2 = 0.25;
+// The client snaps the requested viewport outward to the 0.1° tile grid, which
+// can grow each axis by up to ~0.1°. The cap is sized so viewports that used to
+// render nodes don't get truncated purely because of that outward snapping;
+// tiles are fetched concurrently and cached per tile, so the extra area is cheap.
+const MAX_AREA_DEG2 = 0.36;
 
 export async function getNetworkData(bbox: Bbox): Promise<NetworkData> {
   const area =

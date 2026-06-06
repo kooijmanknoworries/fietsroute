@@ -275,17 +275,34 @@ export function getTilesForBbox(bbox: Bbox): Bbox[] {
   return tiles;
 }
 
+const TILE_FETCH_CONCURRENCY = 5;
+
 export async function fetchOverpassTiles(
   bbox: Bbox,
   options: FetchOverpassOptions = {},
 ): Promise<OverpassResult> {
   const tiles = getTilesForBbox(bbox);
+
+  // Fetch tiles concurrently (bounded) so multi-tile viewports don't wait on
+  // one Overpass round-trip at a time. Results are merged back in tile order
+  // to keep node/way de-duplication deterministic.
+  const results: OverpassResult[] = new Array(tiles.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const index = next++;
+      if (index >= tiles.length) return;
+      results[index] = await fetchOverpass(tiles[index], options);
+    }
+  }
+  const workerCount = Math.min(TILE_FETCH_CONCURRENCY, tiles.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
   const nodes = new Map<number, OverpassNode>();
   const ways: OverpassWay[] = [];
   const seenWays = new Set<number>();
 
-  for (const tile of tiles) {
-    const result = await fetchOverpass(tile, options);
+  for (const result of results) {
     for (const [id, node] of result.nodes) {
       if (!nodes.has(id)) nodes.set(id, node);
     }

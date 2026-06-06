@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { useDebounce } from "use-debounce";
 import { 
@@ -69,7 +69,8 @@ export function useRoutePlanner() {
     { 
       query: { 
         enabled: !!debouncedBbox, 
-        queryKey: getGetNetworkQueryKey({ bbox: debouncedBbox })
+        queryKey: getGetNetworkQueryKey({ bbox: debouncedBbox }),
+        placeholderData: keepPreviousData,
       } 
     }
   );
