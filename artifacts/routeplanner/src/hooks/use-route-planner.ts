@@ -141,6 +141,54 @@ function isSlowConnection(): boolean {
   return /(^|-)2g$/.test(conn.effectiveType ?? "");
 }
 
+// Heuristic for a fast connection (reported "4g", no data-saver) where warming
+// the trailing tiles a little sooner is cheap. Used to shrink the trailing
+// pre-load delay so a quick reversal still resolves from cache. When the
+// Network Information API is unavailable we don't assume fast.
+function isFastConnection(): boolean {
+  const conn = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  if (!conn) return false;
+  if (conn.saveData) return false;
+  return conn.effectiveType === "4g";
+}
+
+// Recent pans older than this are ignored when reasoning about pan direction.
+const PAN_HISTORY_WINDOW_MS = 6000;
+
+// Whether the user's recent pans include a reversal — i.e. two consecutive
+// recent headings point in roughly opposite directions (negative dot product).
+// When true the user is panning back and forth, so warming the trailing tiles
+// eagerly (rather than after a delay) keeps the reverse pan instant.
+function recentlyReversed(
+  history: Array<{ dx: number; dy: number; t: number }>,
+): boolean {
+  for (let i = 1; i < history.length; i++) {
+    const a = history[i - 1];
+    const b = history[i];
+    if (a.dx * b.dx + a.dy * b.dy < 0) return true;
+  }
+  return false;
+}
+
+// How long to wait before warming the trailing tiles (the ones behind the
+// user's heading), in ms, or null to skip them entirely. Warming them lets a
+// quick reversal still resolve from cache. We:
+//   - skip them on slow / data-saver links to cut background traffic;
+//   - warm them immediately when the user is already reversing/oscillating;
+//   - otherwise warm them after a short delay — shrunk on fast connections, and
+//     well under the old 1.5s so a reverse shortly after a pan still finds them
+//     warm — short enough that a user who keeps panning the same way still
+//     cancels them first (the effect re-runs and clears the pending timeout).
+function trailingDelayMs(reversing: boolean): number | null {
+  if (isSlowConnection()) return null;
+  if (reversing) return 0;
+  return isFastConnection() ? 300 : 700;
+}
+
 export function useRoutePlanner() {
   const queryClient = useQueryClient();
   const { isSignedIn } = useAuth();
@@ -150,13 +198,23 @@ export function useRoutePlanner() {
   const [bbox, setBbox] = useState<string>("");
   const [debouncedBbox] = useDebounce(bbox, 500);
 
-  // Most recent pan direction reported by the map, used to prioritise which
-  // neighbouring tiles to pre-load. Kept in a ref so updating it doesn't
-  // re-render or re-run the pre-load effect on its own.
-  const panDirectionRef = useRef<{ dx: number; dy: number } | null>(null);
+  // Short rolling history of recent pan directions (newest last), each tagged
+  // with the time it was reported. Used to (a) prioritise the latest heading
+  // when pre-loading and (b) detect when the user is reversing/oscillating so
+  // the opposite ("trailing") tiles can be warmed eagerly. Kept in a ref so
+  // updating it never triggers a re-render or re-runs the pre-load effect.
+  const panHistoryRef = useRef<Array<{ dx: number; dy: number; t: number }>>([]);
   const handleViewportChange = useCallback(
     (nextBbox: string, direction: { dx: number; dy: number } | null) => {
-      if (direction) panDirectionRef.current = direction;
+      if (direction) {
+        const now = Date.now();
+        const history = panHistoryRef.current.filter(
+          (h) => now - h.t < PAN_HISTORY_WINDOW_MS,
+        );
+        history.push({ ...direction, t: now });
+        // Keep only the few most recent entries — enough to spot a reversal.
+        panHistoryRef.current = history.slice(-4);
+      }
       setBbox(nextBbox);
     },
     [],
@@ -197,13 +255,14 @@ export function useRoutePlanner() {
     if (neighbours.length === 0) return;
 
     // Prioritise the tiles in the direction of the most recent pan. The leading
-    // edge is fetched eagerly; the rest are warmed only after a short delay so a
-    // user who keeps panning cancels them before they ever start.
-    const { leading, trailing } = splitNeighboursByDirection(
-      neighbours,
-      panDirectionRef.current,
-    );
-    const slow = isSlowConnection();
+    // edge is fetched eagerly; the rest are warmed after an adaptive delay (or
+    // eagerly if the user is reversing/oscillating) so a quick reverse pan still
+    // resolves from cache while a user who keeps panning cancels them first.
+    const history = panHistoryRef.current;
+    const latest = history.length ? history[history.length - 1] : null;
+    const reversing = recentlyReversed(history);
+    const { leading, trailing } = splitNeighboursByDirection(neighbours, latest);
+    const trailingDelay = trailingDelayMs(reversing);
 
     const prefetch = (nbBbox: string) => {
       void queryClient.prefetchQuery({
@@ -218,17 +277,25 @@ export function useRoutePlanner() {
     let cancelled = false;
     let trailingTimeoutId: ReturnType<typeof setTimeout> | undefined;
 
+    const runTrailing = () => {
+      if (cancelled) return;
+      for (const nb of trailing) prefetch(nb.bbox);
+    };
+
     const runLeading = () => {
       if (cancelled) return;
       for (const nb of leading) prefetch(nb.bbox);
 
-      // Warm the remaining neighbours lazily, at lower priority. On slow or
-      // data-saver connections skip them entirely to cut background traffic.
-      if (trailing.length === 0 || slow) return;
-      trailingTimeoutId = setTimeout(() => {
-        if (cancelled) return;
-        for (const nb of trailing) prefetch(nb.bbox);
-      }, 1500);
+      // Warm the remaining neighbours lazily, at lower priority. A null delay
+      // means skip them entirely (slow / data-saver links). A zero delay means
+      // warm them now (the user is reversing/oscillating). Otherwise defer them
+      // briefly so a user who keeps panning the same way cancels them first.
+      if (trailing.length === 0 || trailingDelay === null) return;
+      if (trailingDelay === 0) {
+        runTrailing();
+        return;
+      }
+      trailingTimeoutId = setTimeout(runTrailing, trailingDelay);
     };
 
     const win = window as Window & {
