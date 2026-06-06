@@ -302,14 +302,21 @@ export default function Home() {
                 </button>
               </div>
               <Show when="signed-in">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 shrink-0"
-                  onClick={() => signOut({ redirectUrl: basePath || "/" })}
-                >
-                  <LogOut className="mr-1.5 h-4 w-4" /> {t("auth.signOut")}
-                </Button>
+                <div className="flex items-center gap-2 min-w-0">
+                  {user?.primaryEmailAddress?.emailAddress && (
+                    <span className="hidden sm:inline text-xs opacity-90 truncate max-w-[12rem]">
+                      {user.primaryEmailAddress.emailAddress}
+                    </span>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-8 shrink-0"
+                    onClick={() => signOut({ redirectUrl: basePath || "/" })}
+                  >
+                    <LogOut className="mr-1.5 h-4 w-4" /> {t("auth.signOut")}
+                  </Button>
+                </div>
               </Show>
               <Show when="signed-out">
                 <Button
@@ -324,13 +331,6 @@ export default function Home() {
             </div>
           </div>
           <p className="text-sm opacity-90">{t("app.subtitle")}</p>
-          <Show when="signed-in">
-            {user?.primaryEmailAddress?.emailAddress && (
-              <p className="text-xs opacity-75 mt-1 truncate">
-                {user.primaryEmailAddress.emailAddress}
-              </p>
-            )}
-          </Show>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
