@@ -162,6 +162,17 @@ export default function Map({
 
     const m = map.current;
 
+    // Zoom (+/-) buttons in the lower-left corner, with a scale bar beneath them
+    // showing the current distance in km/m (e.g. 2 km, 1 km, 500 m, 200 m...).
+    m.addControl(
+      new maplibregl.NavigationControl({ showZoom: true, showCompass: false }),
+      "bottom-left"
+    );
+    m.addControl(
+      new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }),
+      "bottom-left"
+    );
+
     m.on("load", () => {
       m.addSource("boundary", {
         type: "geojson",

@@ -46,9 +46,12 @@ vi.mock("maplibre-gl", () => {
     addLayer() {}
     setFeatureState() {}
     setLayoutProperty() {}
+    addControl() {}
     remove() {}
   }
-  return { default: { Map: FakeMap } };
+  class NavigationControl {}
+  class ScaleControl {}
+  return { default: { Map: FakeMap, NavigationControl, ScaleControl } };
 });
 
 import Map from "./Map";
