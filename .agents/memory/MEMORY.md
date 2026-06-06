@@ -1,0 +1,2 @@
+- [Overpass API usage](overpass-api.md) — Overpass needs a descriptive User-Agent header or returns 406; guard bbox size to avoid huge/slow queries.
+- [MapLibre GL WebGL](maplibre-webgl.md) — v4 dropped `maplibregl.supported`; wrap Map ctor in try/catch; headless screenshot env has no WebGL but real browsers do.

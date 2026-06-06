@@ -10,6 +10,12 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: network
+    description: Cycling node network (knooppunten) operations
+  - name: routing
+    description: Node-based route planning
+  - name: regions
+    description: Quick-jump regions
 paths:
   /healthz:
     get:
@@ -24,6 +30,97 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /network:
+    get:
+      operationId: getNetwork
+      tags: [network]
+      summary: Get cycling node network for a bounding box
+      description: >
+        Returns the numbered cycling nodes (knooppunten) and the network
+        segments that connect them, within the given bounding box. Data is
+        sourced from OpenStreetMap and cached.
+      parameters:
+        - name: bbox
+          in: query
+          required: true
+          description: "Bounding box as minLon,minLat,maxLon,maxLat (WGS84)."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Network data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkData"
+        "400":
+          description: Invalid bounding box
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Upstream data source error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /route:
+    post:
+      operationId: planRoute
+      tags: [routing]
+      summary: Plan a route along the node network
+      description: >
+        Given an ordered list of selected nodes, computes the route that
+        follows the cycling network segments between each consecutive pair of
+        nodes, returning the full geometry, the ordered node numbers, and the
+        total distance.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RouteRequest"
+      responses:
+        "200":
+          description: Planned route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoutePlan"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "422":
+          description: No connecting path found between the selected nodes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Upstream data source error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /regions:
+    get:
+      operationId: getRegions
+      tags: [regions]
+      summary: Get quick-jump regions
+      description: A curated list of popular cycling regions to jump the map to.
+      responses:
+        "200":
+          description: Regions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Region"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +130,159 @@ components:
           type: string
       required:
         - status
-
+    ApiError:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+    NetworkNode:
+      type: object
+      description: A numbered cycling node (knooppunt).
+      properties:
+        id:
+          type: string
+          description: Stable OSM node id.
+        ref:
+          type: string
+          description: The knooppunt number shown on signage (e.g. "34").
+        lat:
+          type: number
+        lon:
+          type: number
+      required:
+        - id
+        - ref
+        - lat
+        - lon
+    NetworkSegment:
+      type: object
+      description: A network path geometry connecting points in the node network.
+      properties:
+        id:
+          type: string
+        coordinates:
+          type: array
+          description: "Ordered [lon, lat] pairs describing the segment line."
+          items:
+            type: array
+            items:
+              type: number
+      required:
+        - id
+        - coordinates
+    NetworkData:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkNode"
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/NetworkSegment"
+        truncated:
+          type: boolean
+          description: True if the area was too large and results were limited.
+      required:
+        - nodes
+        - segments
+        - truncated
+    RouteRequestNode:
+      type: object
+      properties:
+        id:
+          type: string
+        ref:
+          type: string
+        lat:
+          type: number
+        lon:
+          type: number
+      required:
+        - id
+        - ref
+        - lat
+        - lon
+    RouteRequest:
+      type: object
+      properties:
+        nodes:
+          type: array
+          description: Ordered list of selected nodes to route through.
+          items:
+            $ref: "#/components/schemas/RouteRequestNode"
+      required:
+        - nodes
+    RouteLeg:
+      type: object
+      description: One leg of the route between two consecutive nodes.
+      properties:
+        fromRef:
+          type: string
+        toRef:
+          type: string
+        distanceMeters:
+          type: number
+        coordinates:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+      required:
+        - fromRef
+        - toRef
+        - distanceMeters
+        - coordinates
+    RoutePlan:
+      type: object
+      properties:
+        nodeRefs:
+          type: array
+          description: The ordered knooppunt numbers along the route.
+          items:
+            type: string
+        coordinates:
+          type: array
+          description: "Full route geometry as ordered [lon, lat] pairs."
+          items:
+            type: array
+            items:
+              type: number
+        distanceMeters:
+          type: number
+        legs:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteLeg"
+      required:
+        - nodeRefs
+        - coordinates
+        - distanceMeters
+        - legs
+    Region:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        country:
+          type: string
+          description: ISO country code (NL or BE).
+        lat:
+          type: number
+        lon:
+          type: number
+        zoom:
+          type: number
+      required:
+        - id
+        - name
+        - country
+        - lat
+        - lon
+        - zoom

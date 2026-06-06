@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Fietsrouteplanner"
+version = "1.0.0"
+id = "artifacts/routeplanner"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23322
+
+[services.development]
+run = "pnpm --filter @workspace/routeplanner run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/routeplanner", "run", "build" ]
+publicDir = "artifacts/routeplanner/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23322"
+BASE_PATH = "/"
