@@ -26,10 +26,11 @@ interface LayoutCall {
   value: unknown;
 }
 
-const { constructorCalls, fitBoundsCalls, layoutCalls } = vi.hoisted(() => ({
+const { constructorCalls, fitBoundsCalls, layoutCalls, addedLayers } = vi.hoisted(() => ({
   constructorCalls: [] as MapOptions[],
   fitBoundsCalls: [] as Array<{ bounds: unknown; options: unknown }>,
   layoutCalls: [] as LayoutCall[],
+  addedLayers: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("maplibre-gl", () => {
@@ -37,7 +38,15 @@ vi.mock("maplibre-gl", () => {
     constructor(options: MapOptions) {
       constructorCalls.push(options);
     }
-    on() {}
+    on(event: string, ...args: unknown[]) {
+      // The component registers its layers/sources inside the "load" handler.
+      // Fire it synchronously so the test can inspect the added layers. The
+      // layer-target overload (on("click", "layer", cb)) passes the callback
+      // as the last argument, so only invoke zero-arg "load" handlers.
+      if (event === "load" && args.length === 1 && typeof args[0] === "function") {
+        (args[0] as () => void)();
+      }
+    }
     once() {}
     off() {}
     isStyleLoaded() {
@@ -55,6 +64,9 @@ vi.mock("maplibre-gl", () => {
         getNorth: () => 0,
       };
     }
+    getCenter() {
+      return { lng: 0, lat: 0 };
+    }
     getCanvas() {
       return { style: {} };
     }
@@ -62,7 +74,9 @@ vi.mock("maplibre-gl", () => {
       return undefined;
     }
     addSource() {}
-    addLayer() {}
+    addLayer(layer: Record<string, unknown>) {
+      addedLayers.push(layer);
+    }
     setFeatureState() {}
     setLayoutProperty(layerId: string, property: string, value: unknown) {
       layoutCalls.push({ layerId, property, value });
@@ -118,6 +132,7 @@ describe("Map", () => {
     constructorCalls.length = 0;
     fitBoundsCalls.length = 0;
     layoutCalls.length = 0;
+    addedLayers.length = 0;
     localStorage.clear();
   });
 
@@ -168,6 +183,38 @@ describe("Map", () => {
     expect(style).toBeDefined();
     expect(typeof style?.glyphs).toBe("string");
     expect(style?.glyphs).toMatch(/\{fontstack\}.*\{range\}/);
+  });
+
+  it("requests a font the configured glyphs host can serve for the node-number labels", () => {
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
+
+    // The fonts.openmaptiles.org glyphs host (set as the style's `glyphs` URL)
+    // serves the "Open Sans" family. If the symbol layer asks for a font the
+    // host doesn't provide, the knooppunt numbers render no text — so guard
+    // that the text layer only requests fonts from this supported set.
+    const SUPPORTED_FONTS = [
+      "Open Sans Regular",
+      "Open Sans Bold",
+      "Open Sans Semibold",
+      "Open Sans Italic",
+    ];
+
+    const textLayer = addedLayers.find((l) => l.id === "nodes-layer-text");
+    expect(textLayer).toBeDefined();
+
+    const layout = textLayer?.layout as { "text-font"?: unknown } | undefined;
+    const textFont = layout?.["text-font"];
+    expect(Array.isArray(textFont)).toBe(true);
+
+    const fonts = textFont as string[];
+    expect(fonts.length).toBeGreaterThan(0);
+    for (const font of fonts) {
+      expect(SUPPORTED_FONTS).toContain(font);
+    }
   });
 
   it("fits the map to a selected municipality's bounds via fitBounds", () => {
