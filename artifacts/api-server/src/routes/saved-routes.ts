@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db, savedRoutesTable } from "@workspace/db";
 import {
   SaveRouteBody,
+  UpdateSavedRouteBody,
   GetSavedRouteResponse,
   ListSavedRoutesResponse,
 } from "@workspace/api-zod";
@@ -129,6 +130,57 @@ router.get("/routes/:id", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to fetch saved route");
     res.status(502).json({ message: "Failed to fetch saved route" });
+  }
+});
+
+router.patch("/routes/:id", async (req, res): Promise<void> => {
+  const ownerKey = getOwnerKey(req);
+  if (!ownerKey) {
+    res.status(400).json({ message: "Missing owner key" });
+    return;
+  }
+
+  const parsed = UpdateSavedRouteBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ message: "Invalid request body" });
+    return;
+  }
+
+  const name = parsed.data.name.trim();
+  if (name === "") {
+    res.status(400).json({ message: "Route name is required" });
+    return;
+  }
+
+  try {
+    const [row] = await db
+      .update(savedRoutesTable)
+      .set({ name })
+      .where(
+        and(
+          eq(savedRoutesTable.id, req.params.id),
+          eq(savedRoutesTable.ownerKey, ownerKey),
+        ),
+      )
+      .returning();
+
+    if (!row) {
+      res.status(404).json({ message: "Route not found" });
+      return;
+    }
+
+    res.json(
+      GetSavedRouteResponse.parse({
+        id: row.id,
+        name: row.name,
+        nodes: row.nodes,
+        plan: row.plan,
+        createdAt: row.createdAt,
+      }),
+    );
+  } catch (err) {
+    req.log.error({ err }, "Failed to update saved route");
+    res.status(502).json({ message: "Failed to update saved route" });
   }
 });
 

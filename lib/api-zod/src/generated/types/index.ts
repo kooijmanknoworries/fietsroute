@@ -23,3 +23,4 @@ export * from './routeRequestNode';
 export * from './savedRoute';
 export * from './savedRouteSummary';
 export * from './saveRouteRequest';
+export * from './updateSavedRouteRequest';

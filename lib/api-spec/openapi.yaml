@@ -225,6 +225,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: updateSavedRoute
+      tags: [routes]
+      summary: Update a saved route (e.g. rename it)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSavedRouteRequest"
+      responses:
+        "200":
+          description: The updated saved route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedRoute"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Route not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
     delete:
       operationId: deleteSavedRoute
       tags: [routes]
@@ -386,6 +421,14 @@ components:
         - coordinates
         - distanceMeters
         - legs
+    UpdateSavedRouteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: New user-provided name for the route.
+      required:
+        - name
     SaveRouteRequest:
       type: object
       properties:

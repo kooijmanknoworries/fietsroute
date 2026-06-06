@@ -8,6 +8,7 @@ import {
   useListSavedRoutes,
   useSaveRoute,
   useDeleteSavedRoute,
+  useUpdateSavedRoute,
   getSavedRoute,
   getListSavedRoutesQueryKey,
   getGetNetworkQueryKey,
@@ -149,6 +150,7 @@ export function useRoutePlanner() {
 
   const saveRouteMutation = useSaveRoute();
   const deleteRouteMutation = useDeleteSavedRoute();
+  const updateRouteMutation = useUpdateSavedRoute();
 
   const handleSaveRoute = useCallback(
     (name: string) => {
@@ -213,6 +215,24 @@ export function useRoutePlanner() {
     [deleteRouteMutation, queryClient],
   );
 
+  const handleRenameSavedRoute = useCallback(
+    (id: string, name: string) => {
+      return new Promise<void>((resolve, reject) => {
+        updateRouteMutation.mutate(
+          { id, data: { name } },
+          {
+            onSuccess: () => {
+              queryClient.invalidateQueries({ queryKey: getListSavedRoutesQueryKey() });
+              resolve();
+            },
+            onError: (err) => reject(err),
+          },
+        );
+      });
+    },
+    [updateRouteMutation, queryClient],
+  );
+
   return {
     bbox,
     setBbox,
@@ -237,5 +257,7 @@ export function useRoutePlanner() {
     handleOpenSavedRoute,
     openingRouteId,
     handleDeleteSavedRoute,
+    handleRenameSavedRoute,
+    isRenamingRoute: updateRouteMutation.isPending,
   };
 }

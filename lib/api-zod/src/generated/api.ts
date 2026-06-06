@@ -181,6 +181,41 @@ export const GetSavedRouteResponse = zod.object({
 
 
 /**
+ * @summary Update a saved route (e.g. rename it)
+ */
+export const UpdateSavedRouteParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const UpdateSavedRouteBody = zod.object({
+  "name": zod.string().describe('New user-provided name for the route.')
+})
+
+export const UpdateSavedRouteResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "nodes": zod.array(zod.object({
+  "id": zod.string(),
+  "ref": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number()
+})),
+  "plan": zod.object({
+  "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
+  "coordinates": zod.array(zod.array(zod.number())).describe('Full route geometry as ordered [lon, lat] pairs.'),
+  "distanceMeters": zod.number(),
+  "legs": zod.array(zod.object({
+  "fromRef": zod.string(),
+  "toRef": zod.string(),
+  "distanceMeters": zod.number(),
+  "coordinates": zod.array(zod.array(zod.number()))
+}).describe('One leg of the route between two consecutive nodes.'))
+}),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Delete a saved route by id
  */
 export const DeleteSavedRouteParams = zod.object({

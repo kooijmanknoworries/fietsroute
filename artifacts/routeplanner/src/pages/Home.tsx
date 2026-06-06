@@ -14,7 +14,8 @@ import {
   FolderOpen,
   Search,
   Star,
-  X
+  X,
+  Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -69,7 +70,9 @@ export default function Home() {
     isSavingRoute,
     handleOpenSavedRoute,
     openingRouteId,
-    handleDeleteSavedRoute
+    handleDeleteSavedRoute,
+    handleRenameSavedRoute,
+    isRenamingRoute
   } = useRoutePlanner();
 
   const {
@@ -89,6 +92,8 @@ export default function Home() {
   const [routeName, setRouteName] = useState("");
   const [municipalityOpen, setMunicipalityOpen] = useState(false);
   const [fitBounds, setFitBounds] = useState<MunicipalityResult["boundingBox"] | null>(null);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const initialBounds = initialFavorite?.boundingBox ?? null;
 
@@ -117,6 +122,31 @@ export default function Home() {
     toast({ title: "Route saved", description: `"${name}" added to your saved routes.` });
     setRouteName("");
     setSaveDialogOpen(false);
+  };
+
+  const openRenameDialog = (route: { id: string; name: string }) => {
+    setRenameTarget(route);
+    setRenameValue(route.name);
+  };
+
+  const submitRenameRoute = async () => {
+    if (!renameTarget) return;
+    const name = renameValue.trim();
+    if (!name || name === renameTarget.name) {
+      setRenameTarget(null);
+      return;
+    }
+    try {
+      await handleRenameSavedRoute(renameTarget.id, name);
+      toast({ title: "Route renamed", description: `Renamed to "${name}".` });
+      setRenameTarget(null);
+    } catch (err) {
+      toast({
+        title: "Rename failed",
+        description: err instanceof Error ? err.message : "Could not rename the route.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleExportGPX = () => {
@@ -429,6 +459,15 @@ export default function Home() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-8 w-8"
+                      title="Rename route"
+                      onClick={() => openRenameDialog({ id: route.id, name: route.name })}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 text-destructive"
                       title="Delete route"
                       onClick={() => handleDeleteSavedRoute(route.id)}
@@ -526,6 +565,45 @@ export default function Home() {
                 <Save className="mr-2 h-4 w-4" />
               )}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename Route Dialog */}
+      <Dialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRenameTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename route</DialogTitle>
+            <DialogDescription>
+              Update the name of your saved route.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            placeholder="Route name"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitRenameRoute();
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={submitRenameRoute} disabled={!renameValue.trim() || isRenamingRoute}>
+              {isRenamingRoute ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Pencil className="mr-2 h-4 w-4" />
+              )}
+              Rename
             </Button>
           </DialogFooter>
         </DialogContent>

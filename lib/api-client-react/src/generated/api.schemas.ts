@@ -72,6 +72,11 @@ export interface RoutePlan {
   legs: RouteLeg[];
 }
 
+export interface UpdateSavedRouteRequest {
+  /** New user-provided name for the route. */
+  name: string;
+}
+
 export interface SaveRouteRequest {
   /** User-provided name for the route. */
   name: string;

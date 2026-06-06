@@ -31,7 +31,8 @@ import type {
   RouteRequest,
   SaveRouteRequest,
   SavedRoute,
-  SavedRouteSummary
+  SavedRouteSummary,
+  UpdateSavedRouteRequest
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -674,6 +675,78 @@ export function useGetSavedRoute<TData = Awaited<ReturnType<typeof getSavedRoute
 
 
 
+
+export const getUpdateSavedRouteUrl = (id: string,) => {
+
+
+
+
+  return `/api/routes/${id}`
+}
+
+/**
+ * @summary Update a saved route (e.g. rename it)
+ */
+export const updateSavedRoute = async (id: string,
+    updateSavedRouteRequest: UpdateSavedRouteRequest, options?: RequestInit): Promise<SavedRoute> => {
+
+  return customFetch<SavedRoute>(getUpdateSavedRouteUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateSavedRouteRequest,)
+  }
+);}
+
+
+
+
+export const getUpdateSavedRouteMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSavedRoute>>, TError,{id: string;data: BodyType<UpdateSavedRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSavedRoute>>, TError,{id: string;data: BodyType<UpdateSavedRouteRequest>}, TContext> => {
+
+const mutationKey = ['updateSavedRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSavedRoute>>, {id: string;data: BodyType<UpdateSavedRouteRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSavedRoute(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSavedRouteMutationResult = NonNullable<Awaited<ReturnType<typeof updateSavedRoute>>>
+    export type UpdateSavedRouteMutationBody = BodyType<UpdateSavedRouteRequest>
+    export type UpdateSavedRouteMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Update a saved route (e.g. rename it)
+ */
+export const useUpdateSavedRoute = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSavedRoute>>, TError,{id: string;data: BodyType<UpdateSavedRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSavedRoute>>,
+        TError,
+        {id: string;data: BodyType<UpdateSavedRouteRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateSavedRouteMutationOptions(options));
+    }
 
 export const getDeleteSavedRouteUrl = (id: string,) => {
 
