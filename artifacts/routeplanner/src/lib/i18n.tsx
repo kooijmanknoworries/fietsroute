@@ -93,6 +93,7 @@ const en = {
   "map.style.voyager": "Voyager",
   "map.style.positron": "Light",
   "map.style.dark": "Dark",
+  "map.style.osm": "OpenStreetMap",
   "map.webglError":
     "The interactive map could not start because this browser or environment does not support WebGL. Try opening the app in a standard desktop browser with hardware acceleration enabled.",
 
@@ -209,6 +210,7 @@ const nl: Record<TranslationKey, string> = {
   "map.style.voyager": "Voyager",
   "map.style.positron": "Licht",
   "map.style.dark": "Donker",
+  "map.style.osm": "OpenStreetMap",
   "map.webglError":
     "De interactieve kaart kon niet starten omdat deze browser of omgeving geen WebGL ondersteunt. Open de app in een normale desktopbrowser met hardwareversnelling ingeschakeld.",
 

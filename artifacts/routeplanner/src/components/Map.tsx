@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette } from "lucide-react";
+import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe } from "lucide-react";
 import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
 import {
   getBaseLayer,
@@ -38,23 +38,30 @@ interface MapProps {
   fitBounds?: Bounds | null;
 }
 
-// Free, keyless CARTO raster basemaps. The "@2x" variant serves high-resolution
-// (retina) tiles so text and lines stay sharp on high-DPI screens. Each style is
-// a different "look" the cyclist can pick between:
+// Free, keyless raster basemaps. The CARTO styles' "@2x" variant serves high-
+// resolution (retina) tiles so text and lines stay sharp on high-DPI screens.
+// Each style is a different "look" the cyclist can pick between:
 //  - voyager : clean, modern colour map with crisp, readable labels (default)
 //  - positron: bright, low-detail light map (good for printing / glare)
 //  - dark    : high-contrast dark map
-const STREET_STYLE_PATHS: Record<StreetStyle, string> = {
+//  - osm     : the classic plain OpenStreetMap raster
+const CARTO_STYLE_PATHS: Partial<Record<StreetStyle, string>> = {
   voyager: "rastertiles/voyager",
   positron: "light_all",
   dark: "dark_all",
 };
 
+const OSM_TILE_URLS = ["a", "b", "c"].map(
+  (sub) => `https://${sub}.tile.openstreetmap.org/{z}/{x}/{y}.png`,
+);
+
 const streetTileUrls = (style: StreetStyle): string[] =>
-  ["a", "b", "c", "d"].map(
-    (sub) =>
-      `https://${sub}.basemaps.cartocdn.com/${STREET_STYLE_PATHS[style]}/{z}/{x}/{y}@2x.png`,
-  );
+  style === "osm"
+    ? OSM_TILE_URLS
+    : ["a", "b", "c", "d"].map(
+        (sub) =>
+          `https://${sub}.basemaps.cartocdn.com/${CARTO_STYLE_PATHS[style]}/{z}/{x}/{y}@2x.png`,
+      );
 
 const streetSourceId = (style: StreetStyle): string => `street-${style}`;
 const streetLayerId = (style: StreetStyle): string => `street-${style}-layer`;
@@ -63,6 +70,7 @@ const STREET_STYLE_ICONS: Record<StreetStyle, typeof MapIcon> = {
   voyager: MapIcon,
   positron: Sun,
   dark: Moon,
+  osm: Globe,
 };
 
 // Esri World Imagery: free, keyless high-resolution aerial imagery. Used as a
@@ -74,8 +82,12 @@ const SATELLITE_TILE_URLS = [
 const SATELLITE_LABEL_URLS = [
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
 ];
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const STREET_ATTRIBUTION =
-  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+  OSM_ATTRIBUTION + ' &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const streetAttribution = (style: StreetStyle): string =>
+  style === "osm" ? OSM_ATTRIBUTION : STREET_ATTRIBUTION;
 const SATELLITE_ATTRIBUTION =
   'Imagery &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community';
 
@@ -133,7 +145,7 @@ export default function Map({
           type: "raster" as const,
           tiles: streetTileUrls(style),
           tileSize: 256,
-          attribution: STREET_ATTRIBUTION,
+          attribution: streetAttribution(style),
         },
       ]),
     );
