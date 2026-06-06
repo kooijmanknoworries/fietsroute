@@ -30,10 +30,14 @@ interface MapProps {
   fitBounds?: Bounds | null;
 }
 
-const OSM_TILE_URLS = [
-  "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-  "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
+// CARTO Voyager: free, keyless basemap with a clean, modern look and crisp,
+// readable labels. The "@2x" variant serves high-resolution (retina) tiles so
+// text and lines stay sharp on high-DPI screens.
+const STREET_TILE_URLS = [
+  "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+  "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+  "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png",
+  "https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png"
 ];
 
 // Esri World Imagery: free, keyless high-resolution aerial imagery. Used as a
@@ -45,8 +49,8 @@ const SATELLITE_TILE_URLS = [
 const SATELLITE_LABEL_URLS = [
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
 ];
-const OSM_ATTRIBUTION =
-  'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const STREET_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 const SATELLITE_ATTRIBUTION =
   'Imagery &copy; <a href="https://www.esri.com">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community';
 
@@ -95,9 +99,9 @@ export default function Map({
           sources: {
             "raster-tiles": {
               type: "raster",
-              tiles: OSM_TILE_URLS,
+              tiles: STREET_TILE_URLS,
               tileSize: 256,
-              attribution: OSM_ATTRIBUTION
+              attribution: STREET_ATTRIBUTION
             },
             "satellite-tiles": {
               type: "raster",
