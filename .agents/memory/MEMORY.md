@@ -1,2 +1,4 @@
 - [Overpass API usage](overpass-api.md) — Overpass needs a descriptive User-Agent header or returns 406; guard bbox size to avoid huge/slow queries.
 - [MapLibre GL WebGL](maplibre-webgl.md) — v4 dropped `maplibregl.supported`; wrap Map ctor in try/catch; headless screenshot env has no WebGL but real browsers do.
+- [Overpass persistent cache](overpass-persistent-cache.md) — Overpass results cached in Postgres (`overpass_cache`) with 7-day TTL behind an in-memory L1; cache lives in `fetchOverpass`.
+- [Workspace db typecheck](workspace-db-typecheck.md) — after adding exports to `@workspace/db`, rebuild its `dist/*.d.ts` (`tsc -b lib/db/tsconfig.json`) or api-server typecheck fails on missing members.
