@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { Show, useUser, useClerk } from "@clerk/react";
 import { 
@@ -131,6 +131,18 @@ export default function Home() {
     setMunicipalityOpen(false);
     setMunicipalityQuery("");
   };
+
+  // Return the map to the default area: the saved favorite if set, otherwise
+  // the app's default region (Utrecht).
+  const handleRecenter = useCallback(() => {
+    if (favorite) {
+      setFitBounds({ ...favorite.boundingBox });
+      setBoundaryGeometry(favorite.geometry ?? null);
+    } else {
+      setFlyToRegion({ lat: 52.0907, lon: 5.1214, zoom: 13 });
+      setBoundaryGeometry(null);
+    }
+  }, [favorite, setFlyToRegion]);
 
   const handleToggleFavorite = (m: MunicipalityResult) => {
     if (favorite?.id === m.id) {
@@ -652,6 +664,7 @@ export default function Home() {
           boundaryGeometry={boundaryGeometry}
           onBboxChange={handleViewportChange}
           onNodeClick={handleNodeClick}
+          onRecenter={handleRecenter}
           flyToRegion={flyToRegion}
           initialBounds={initialBounds}
           fitBounds={fitBounds}

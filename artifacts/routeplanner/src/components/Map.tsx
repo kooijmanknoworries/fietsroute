@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { Map as MapIcon, Satellite } from "lucide-react";
+import { Map as MapIcon, Satellite, LocateFixed } from "lucide-react";
 import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
 import { getBaseLayer, setBaseLayer, type BaseLayer } from "@/lib/map-view";
 
@@ -23,6 +23,7 @@ interface MapProps {
     direction: { dx: number; dy: number } | null,
   ) => void;
   onNodeClick: (node: NetworkNode) => void;
+  onRecenter?: () => void;
   flyToRegion?: { lat: number; lon: number; zoom: number } | null;
   initialBounds?: Bounds | null;
   fitBounds?: Bounds | null;
@@ -59,6 +60,7 @@ export default function Map({
   boundaryGeometry,
   onBboxChange,
   onNodeClick,
+  onRecenter,
   flyToRegion,
   initialBounds,
   fitBounds
@@ -507,6 +509,18 @@ export default function Map({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full bg-muted" />
+      {!mapError && onRecenter && (
+        <div className="absolute left-3 top-3 z-10">
+          <button
+            type="button"
+            onClick={onRecenter}
+            title="Center on default area"
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent"
+          >
+            <LocateFixed className="h-3.5 w-3.5" /> Center
+          </button>
+        </div>
+      )}
       {!mapError && (
         <div className="absolute right-3 top-3 z-10 flex overflow-hidden rounded-md border border-border bg-card/95 shadow-md backdrop-blur">
           <button
