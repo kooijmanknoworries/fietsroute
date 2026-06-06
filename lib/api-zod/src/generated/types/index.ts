@@ -17,3 +17,6 @@ export * from './routeLeg';
 export * from './routePlan';
 export * from './routeRequest';
 export * from './routeRequestNode';
+export * from './savedRoute';
+export * from './savedRouteSummary';
+export * from './saveRouteRequest';

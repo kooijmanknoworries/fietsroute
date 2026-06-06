@@ -16,6 +16,8 @@ tags:
     description: Node-based route planning
   - name: regions
     description: Quick-jump regions
+  - name: routes
+    description: Saving and reopening planned routes
 paths:
   /healthz:
     get:
@@ -121,6 +123,90 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Region"
+  /routes:
+    get:
+      operationId: listSavedRoutes
+      tags: [routes]
+      summary: List the current user's saved routes
+      description: >
+        Returns the saved routes belonging to the current browser, most
+        recently saved first. Returns summaries only (no full geometry).
+      responses:
+        "200":
+          description: Saved routes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SavedRouteSummary"
+    post:
+      operationId: saveRoute
+      tags: [routes]
+      summary: Save a planned route
+      description: Persists a named route (selected nodes + planned geometry).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveRouteRequest"
+      responses:
+        "201":
+          description: The saved route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedRoute"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /routes/{id}:
+    get:
+      operationId: getSavedRoute
+      tags: [routes]
+      summary: Get a saved route by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The saved route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedRoute"
+        "404":
+          description: Route not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteSavedRoute
+      tags: [routes]
+      summary: Delete a saved route by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Route deleted
+        "404":
+          description: Route not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -263,6 +349,67 @@ components:
         - coordinates
         - distanceMeters
         - legs
+    SaveRouteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: User-provided name for the route.
+        nodes:
+          type: array
+          description: The ordered selected nodes, so the route can be reopened for editing.
+          items:
+            $ref: "#/components/schemas/RouteRequestNode"
+        plan:
+          $ref: "#/components/schemas/RoutePlan"
+      required:
+        - name
+        - nodes
+        - plan
+    SavedRoute:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteRequestNode"
+        plan:
+          $ref: "#/components/schemas/RoutePlan"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - nodes
+        - plan
+        - createdAt
+    SavedRouteSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        distanceMeters:
+          type: number
+        nodeRefs:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - distanceMeters
+        - nodeRefs
+        - createdAt
     Region:
       type: object
       properties:

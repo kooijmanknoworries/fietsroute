@@ -26,7 +26,10 @@ import type {
   NetworkData,
   Region,
   RoutePlan,
-  RouteRequest
+  RouteRequest,
+  SaveRouteRequest,
+  SavedRoute,
+  SavedRouteSummary
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -355,4 +358,302 @@ export function useGetRegions<TData = Awaited<ReturnType<typeof getRegions>>, TE
 
 
 
+
+export const getListSavedRoutesUrl = () => {
+
+
+
+
+  return `/api/routes`
+}
+
+/**
+ * Returns the saved routes belonging to the current browser, most recently saved first. Returns summaries only (no full geometry).
+
+ * @summary List the current user's saved routes
+ */
+export const listSavedRoutes = async ( options?: RequestInit): Promise<SavedRouteSummary[]> => {
+
+  return customFetch<SavedRouteSummary[]>(getListSavedRoutesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSavedRoutesQueryKey = () => {
+    return [
+    `/api/routes`
+    ] as const;
+    }
+
+
+export const getListSavedRoutesQueryOptions = <TData = Awaited<ReturnType<typeof listSavedRoutes>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSavedRoutes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSavedRoutesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSavedRoutes>>> = ({ signal }) => listSavedRoutes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSavedRoutes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSavedRoutesQueryResult = NonNullable<Awaited<ReturnType<typeof listSavedRoutes>>>
+export type ListSavedRoutesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the current user's saved routes
+ */
+
+export function useListSavedRoutes<TData = Awaited<ReturnType<typeof listSavedRoutes>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSavedRoutes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSavedRoutesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSaveRouteUrl = () => {
+
+
+
+
+  return `/api/routes`
+}
+
+/**
+ * Persists a named route (selected nodes + planned geometry).
+ * @summary Save a planned route
+ */
+export const saveRoute = async (saveRouteRequest: SaveRouteRequest, options?: RequestInit): Promise<SavedRoute> => {
+
+  return customFetch<SavedRoute>(getSaveRouteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      saveRouteRequest,)
+  }
+);}
+
+
+
+
+export const getSaveRouteMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveRoute>>, TError,{data: BodyType<SaveRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveRoute>>, TError,{data: BodyType<SaveRouteRequest>}, TContext> => {
+
+const mutationKey = ['saveRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveRoute>>, {data: BodyType<SaveRouteRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveRoute(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveRouteMutationResult = NonNullable<Awaited<ReturnType<typeof saveRoute>>>
+    export type SaveRouteMutationBody = BodyType<SaveRouteRequest>
+    export type SaveRouteMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Save a planned route
+ */
+export const useSaveRoute = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveRoute>>, TError,{data: BodyType<SaveRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveRoute>>,
+        TError,
+        {data: BodyType<SaveRouteRequest>},
+        TContext
+      > => {
+      return useMutation(getSaveRouteMutationOptions(options));
+    }
+
+export const getGetSavedRouteUrl = (id: string,) => {
+
+
+
+
+  return `/api/routes/${id}`
+}
+
+/**
+ * @summary Get a saved route by id
+ */
+export const getSavedRoute = async (id: string, options?: RequestInit): Promise<SavedRoute> => {
+
+  return customFetch<SavedRoute>(getGetSavedRouteUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSavedRouteQueryKey = (id: string,) => {
+    return [
+    `/api/routes/${id}`
+    ] as const;
+    }
+
+
+export const getGetSavedRouteQueryOptions = <TData = Awaited<ReturnType<typeof getSavedRoute>>, TError = ErrorType<ApiError>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSavedRoute>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSavedRouteQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSavedRoute>>> = ({ signal }) => getSavedRoute(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSavedRoute>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSavedRouteQueryResult = NonNullable<Awaited<ReturnType<typeof getSavedRoute>>>
+export type GetSavedRouteQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get a saved route by id
+ */
+
+export function useGetSavedRoute<TData = Awaited<ReturnType<typeof getSavedRoute>>, TError = ErrorType<ApiError>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSavedRoute>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSavedRouteQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getDeleteSavedRouteUrl = (id: string,) => {
+
+
+
+
+  return `/api/routes/${id}`
+}
+
+/**
+ * @summary Delete a saved route by id
+ */
+export const deleteSavedRoute = async (id: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteSavedRouteUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteSavedRouteMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSavedRoute>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSavedRoute>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteSavedRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSavedRoute>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteSavedRoute(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSavedRouteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSavedRoute>>>
+
+    export type DeleteSavedRouteMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Delete a saved route by id
+ */
+export const useDeleteSavedRoute = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSavedRoute>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSavedRoute>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteSavedRouteMutationOptions(options));
+    }
 

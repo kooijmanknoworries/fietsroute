@@ -1,17 +1,55 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "use-debounce";
 import { 
   useGetNetwork, 
   usePlanRoute, 
   useGetRegions,
+  useListSavedRoutes,
+  useSaveRoute,
+  useDeleteSavedRoute,
+  getSavedRoute,
+  getListSavedRoutesQueryKey,
   getGetNetworkQueryKey,
   getGetRegionsQueryKey,
   NetworkNode,
   RoutePlan,
-  Region
 } from "@workspace/api-client-react";
 
+function viewportForCoordinates(
+  coordinates: number[][],
+): { lat: number; lon: number; zoom: number } | null {
+  if (!coordinates.length) return null;
+
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+
+  for (const [lon, lat] of coordinates) {
+    if (lon < minLon) minLon = lon;
+    if (lat < minLat) minLat = lat;
+    if (lon > maxLon) maxLon = lon;
+    if (lat > maxLat) maxLat = lat;
+  }
+
+  const lon = (minLon + maxLon) / 2;
+  const lat = (minLat + maxLat) / 2;
+  const span = Math.max(maxLon - minLon, maxLat - minLat);
+
+  let zoom = 12;
+  if (span > 1) zoom = 8;
+  else if (span > 0.5) zoom = 9;
+  else if (span > 0.25) zoom = 10;
+  else if (span > 0.1) zoom = 11;
+  else if (span > 0.05) zoom = 12;
+  else zoom = 13;
+
+  return { lat, lon, zoom };
+}
+
 export function useRoutePlanner() {
+  const queryClient = useQueryClient();
   const [bbox, setBbox] = useState<string>("");
   const [debouncedBbox] = useDebounce(bbox, 500);
   
@@ -102,6 +140,79 @@ export function useRoutePlanner() {
     setImportedCoordinates(null);
   }, []);
 
+  // Saved routes
+  const { data: savedRoutes, isLoading: isLoadingSavedRoutes } = useListSavedRoutes({
+    query: {
+      queryKey: getListSavedRoutesQueryKey(),
+    },
+  });
+
+  const saveRouteMutation = useSaveRoute();
+  const deleteRouteMutation = useDeleteSavedRoute();
+
+  const handleSaveRoute = useCallback(
+    (name: string) => {
+      if (!routePlan || selectedNodes.length < 2) return;
+      saveRouteMutation.mutate(
+        {
+          data: {
+            name,
+            nodes: selectedNodes.map((n) => ({
+              id: n.id,
+              ref: n.ref,
+              lat: n.lat,
+              lon: n.lon,
+            })),
+            plan: routePlan,
+          },
+        },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getListSavedRoutesQueryKey() });
+          },
+        },
+      );
+    },
+    [routePlan, selectedNodes, saveRouteMutation, queryClient],
+  );
+
+  const [openingRouteId, setOpeningRouteId] = useState<string | null>(null);
+
+  const handleOpenSavedRoute = useCallback(async (id: string) => {
+    setOpeningRouteId(id);
+    try {
+      const route = await getSavedRoute(id);
+      setSelectedNodes(route.nodes as NetworkNode[]);
+      setRoutePlan(route.plan);
+      setRouteError(null);
+      setImportedCoordinates(null);
+      const viewport = viewportForCoordinates(route.plan.coordinates);
+      if (viewport) {
+        setFlyToRegion(viewport);
+      }
+    } catch (err) {
+      setRouteError(
+        err instanceof Error ? err.message : "Failed to open saved route.",
+      );
+    } finally {
+      setOpeningRouteId(null);
+    }
+  }, []);
+
+  const handleDeleteSavedRoute = useCallback(
+    (id: string) => {
+      deleteRouteMutation.mutate(
+        { id },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getListSavedRoutesQueryKey() });
+          },
+        },
+      );
+    },
+    [deleteRouteMutation, queryClient],
+  );
+
   return {
     bbox,
     setBbox,
@@ -118,6 +229,13 @@ export function useRoutePlanner() {
     setFlyToRegion,
     handleNodeClick,
     handleUndo,
-    handleClear
+    handleClear,
+    savedRoutes,
+    isLoadingSavedRoutes,
+    handleSaveRoute,
+    isSavingRoute: saveRouteMutation.isPending,
+    handleOpenSavedRoute,
+    openingRouteId,
+    handleDeleteSavedRoute,
   };
 }

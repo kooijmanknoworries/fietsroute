@@ -72,6 +72,30 @@ export interface RoutePlan {
   legs: RouteLeg[];
 }
 
+export interface SaveRouteRequest {
+  /** User-provided name for the route. */
+  name: string;
+  /** The ordered selected nodes, so the route can be reopened for editing. */
+  nodes: RouteRequestNode[];
+  plan: RoutePlan;
+}
+
+export interface SavedRoute {
+  id: string;
+  name: string;
+  nodes: RouteRequestNode[];
+  plan: RoutePlan;
+  createdAt: string;
+}
+
+export interface SavedRouteSummary {
+  id: string;
+  name: string;
+  distanceMeters: number;
+  nodeRefs: string[];
+  createdAt: string;
+}
+
 export interface Region {
   id: string;
   name: string;

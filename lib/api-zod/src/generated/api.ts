@@ -83,3 +83,83 @@ export const GetRegionsResponseItem = zod.object({
 export const GetRegionsResponse = zod.array(GetRegionsResponseItem)
 
 
+/**
+ * Returns the saved routes belonging to the current browser, most recently saved first. Returns summaries only (no full geometry).
+
+ * @summary List the current user's saved routes
+ */
+export const ListSavedRoutesResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "distanceMeters": zod.number(),
+  "nodeRefs": zod.array(zod.string()),
+  "createdAt": zod.coerce.date()
+})
+export const ListSavedRoutesResponse = zod.array(ListSavedRoutesResponseItem)
+
+
+/**
+ * Persists a named route (selected nodes + planned geometry).
+ * @summary Save a planned route
+ */
+export const SaveRouteBody = zod.object({
+  "name": zod.string().describe('User-provided name for the route.'),
+  "nodes": zod.array(zod.object({
+  "id": zod.string(),
+  "ref": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number()
+})).describe('The ordered selected nodes, so the route can be reopened for editing.'),
+  "plan": zod.object({
+  "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
+  "coordinates": zod.array(zod.array(zod.number())).describe('Full route geometry as ordered [lon, lat] pairs.'),
+  "distanceMeters": zod.number(),
+  "legs": zod.array(zod.object({
+  "fromRef": zod.string(),
+  "toRef": zod.string(),
+  "distanceMeters": zod.number(),
+  "coordinates": zod.array(zod.array(zod.number()))
+}).describe('One leg of the route between two consecutive nodes.'))
+})
+})
+
+
+/**
+ * @summary Get a saved route by id
+ */
+export const GetSavedRouteParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetSavedRouteResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "nodes": zod.array(zod.object({
+  "id": zod.string(),
+  "ref": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number()
+})),
+  "plan": zod.object({
+  "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
+  "coordinates": zod.array(zod.array(zod.number())).describe('Full route geometry as ordered [lon, lat] pairs.'),
+  "distanceMeters": zod.number(),
+  "legs": zod.array(zod.object({
+  "fromRef": zod.string(),
+  "toRef": zod.string(),
+  "distanceMeters": zod.number(),
+  "coordinates": zod.array(zod.array(zod.number()))
+}).describe('One leg of the route between two consecutive nodes.'))
+}),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a saved route by id
+ */
+export const DeleteSavedRouteParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+

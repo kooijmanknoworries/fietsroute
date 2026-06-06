@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import networkRouter from "./network";
 import routeRouter from "./route";
 import regionsRouter from "./regions";
+import savedRoutesRouter from "./saved-routes";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,6 @@ router.use(healthRouter);
 router.use(networkRouter);
 router.use(routeRouter);
 router.use(regionsRouter);
+router.use(savedRoutesRouter);
 
 export default router;
