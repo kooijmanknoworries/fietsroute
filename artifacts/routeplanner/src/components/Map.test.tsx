@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, fireEvent } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 interface StyleLayer {
   id: string;
@@ -97,7 +97,7 @@ const baseProps = {
 
 const BASE_LAYER_STORAGE_KEY = "fietsrouteplanner.baseLayer";
 
-const STREET_LAYER = "street-voyager-layer";
+const STREET_LAYER = "street-osm-layer";
 
 function visibilityOf(style: MapOptions["style"], layerId: string) {
   return style?.layers?.find((l) => l.id === layerId)?.layout?.visibility;
@@ -123,6 +123,7 @@ describe("Map", () => {
 
   afterEach(() => {
     cleanup();
+    localStorage.clear();
   });
 
   it("opens at the favorite area's bounds when initialBounds is provided", () => {
@@ -269,5 +270,58 @@ describe("Map", () => {
     expect(visibilityOf(style, STREET_LAYER)).toBe("visible");
     expect(visibilityOf(style, "satellite-tiles-layer")).toBe("none");
     expect(visibilityOf(style, "satellite-labels-layer")).toBe("none");
+  });
+
+  it("renders the three style options and persists the chosen look", () => {
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
+
+    // Open the style picker (only available while the street base is shown).
+    // The default look is OpenStreetMap ("osm"), so that is the button label.
+    fireEvent.click(screen.getByRole("button", { name: /OpenStreetMap/ }));
+
+    const menu = screen.getByRole("menu");
+    const options = within(menu).getAllByRole("menuitemradio");
+    expect(options).toHaveLength(4);
+    // Labels render in the default (Dutch) locale.
+    expect(options.map((o) => o.textContent?.trim())).toEqual([
+      "Voyager",
+      "Licht",
+      "Donker",
+      "OpenStreetMap",
+    ]);
+    // OpenStreetMap is the default, so it starts checked.
+    expect(
+      within(menu)
+        .getByRole("menuitemradio", { name: /OpenStreetMap/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+
+    // Pick "Donker" (dark) and confirm the choice is saved for next session.
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Donker/ }));
+
+    expect(localStorage.getItem("fietsrouteplanner.streetStyle")).toBe("dark");
+    // Choosing a street look also switches the street base back on.
+    expect(localStorage.getItem("fietsrouteplanner.baseLayer")).toBe("map");
+  });
+
+  it("restores a previously saved street style on reload", () => {
+    localStorage.setItem("fietsrouteplanner.streetStyle", "dark");
+
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
+
+    // The picker button shows the restored "Donker" (dark) look, not the
+    // default. getByRole throws if it is missing, so this asserts it exists.
+    fireEvent.click(screen.getByRole("button", { name: /Donker/ }));
+    const menu = screen.getByRole("menu");
+    const dark = within(menu).getByRole("menuitemradio", { name: /Donker/ });
+    expect(dark.getAttribute("aria-checked")).toBe("true");
   });
 });
