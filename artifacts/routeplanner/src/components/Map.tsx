@@ -15,7 +15,10 @@ interface MapProps {
   selectedNodes: NetworkNode[];
   routeCoordinates: number[][] | null;
   importedCoordinates: number[][] | null;
-  onBboxChange: (bbox: string) => void;
+  onBboxChange: (
+    bbox: string,
+    direction: { dx: number; dy: number } | null,
+  ) => void;
   onNodeClick: (node: NetworkNode) => void;
   flyToRegion?: { lat: number; lon: number; zoom: number } | null;
   initialBounds?: Bounds | null;
@@ -46,10 +49,13 @@ export default function Map({
   const map = useRef<maplibregl.Map | null>(null);
   const nodesRef = useRef(nodes);
   const onNodeClickRef = useRef(onNodeClick);
+  const onBboxChangeRef = useRef(onBboxChange);
+  const lastCenterRef = useRef<{ lon: number; lat: number } | null>(null);
   const [mapError, setMapError] = useState(false);
 
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
+  onBboxChangeRef.current = onBboxChange;
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -229,7 +235,25 @@ export default function Map({
         const east = snap(bounds.getEast(), "ceil");
         const north = snap(bounds.getNorth(), "ceil");
         const bboxStr = `${west},${south},${east},${north}`;
-        onBboxChange(bboxStr);
+
+        // Work out which way the user just panned by comparing the new view
+        // centre with the previous settled centre. The resulting (dx, dy)
+        // vector (in degrees) lets the pre-loader prioritise the neighbouring
+        // tiles the user is actually heading toward. A pure zoom or the very
+        // first settle leaves the centre unchanged, so direction is null.
+        const centre = m.getCenter();
+        const prev = lastCenterRef.current;
+        let direction: { dx: number; dy: number } | null = null;
+        if (prev) {
+          const dx = centre.lng - prev.lon;
+          const dy = centre.lat - prev.lat;
+          if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9) {
+            direction = { dx, dy };
+          }
+        }
+        lastCenterRef.current = { lon: centre.lng, lat: centre.lat };
+
+        onBboxChangeRef.current(bboxStr, direction);
       };
 
       m.on("moveend", updateBbox);

@@ -54,7 +54,7 @@ import Map from "@/components/Map";
 export default function Home() {
   const {
     bbox,
-    setBbox,
+    handleViewportChange,
     networkData,
     isNetworkLoading,
     regions,
@@ -636,7 +636,7 @@ export default function Home() {
           selectedNodes={selectedNodes}
           routeCoordinates={routePlan?.coordinates || null}
           importedCoordinates={importedCoordinates}
-          onBboxChange={setBbox}
+          onBboxChange={handleViewportChange}
           onNodeClick={handleNodeClick}
           flyToRegion={flyToRegion}
           initialBounds={initialBounds}

@@ -57,12 +57,20 @@ function viewportForCoordinates(
 // little benefit — skip pre-loading in that case.
 const MAX_PREFETCH_SPAN_DEG = 0.6;
 
-// Compute the bbox strings for the eight tiles surrounding the current view.
-// Each neighbour keeps the same width/height as the current view and is shifted
-// by one full view in the relevant direction. The values are formatted exactly
-// like the map's snapped bboxes (`Number(v.toFixed(3))`), so when the user pans
-// one screen over the resulting query key matches and is served from cache.
-function neighbourBboxes(bbox: string): string[] {
+interface Neighbour {
+  bbox: string;
+  // Offset of this tile from the current view, in whole-view steps. Used to
+  // score the tile against the user's pan direction.
+  dx: number;
+  dy: number;
+}
+
+// Compute the eight tiles surrounding the current view. Each neighbour keeps
+// the same width/height as the current view and is shifted by one full view in
+// the relevant direction. The values are formatted exactly like the map's
+// snapped bboxes (`Number(v.toFixed(3))`), so when the user pans one screen over
+// the resulting query key matches and is served from cache.
+function neighbourBboxes(bbox: string): Neighbour[] {
   const parts = bbox.split(",").map(Number);
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return [];
   const [west, south, east, north] = parts;
@@ -72,7 +80,7 @@ function neighbourBboxes(bbox: string): string[] {
   if (width > MAX_PREFETCH_SPAN_DEG || height > MAX_PREFETCH_SPAN_DEG) return [];
 
   const fmt = (v: number) => Number(v.toFixed(3));
-  const result: string[] = [];
+  const result: Neighbour[] = [];
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {
       if (dx === 0 && dy === 0) continue;
@@ -81,10 +89,55 @@ function neighbourBboxes(bbox: string): string[] {
       const ns = fmt(south + dy * height);
       const nn = fmt(north + dy * height);
       if (ns < -90 || nn > 90 || nw < -180 || ne > 180) continue;
-      result.push(`${nw},${ns},${ne},${nn}`);
+      result.push({ bbox: `${nw},${ns},${ne},${nn}`, dx, dy });
     }
   }
   return result;
+}
+
+// Split the surrounding neighbours into the ones the user is heading toward
+// ("leading") and the rest ("trailing"), based on the most recent pan
+// direction. The leading edge is fetched eagerly so panning that way stays
+// instant; the trailing tiles are warmed lazily (and skipped on slow links),
+// which keeps total background traffic down when the user keeps panning.
+function splitNeighboursByDirection(
+  neighbours: Neighbour[],
+  direction: { dx: number; dy: number } | null,
+): { leading: Neighbour[]; trailing: Neighbour[] } {
+  if (!direction) return { leading: neighbours, trailing: [] };
+  const mag = Math.hypot(direction.dx, direction.dy);
+  if (mag === 0) return { leading: neighbours, trailing: [] };
+
+  const nx = direction.dx / mag;
+  const ny = direction.dy / mag;
+
+  const scored = neighbours.map((n) => {
+    const omag = Math.hypot(n.dx, n.dy) || 1;
+    // Cosine of the angle between the pan direction and this tile's offset.
+    const dot = (n.dx * nx + n.dy * ny) / omag;
+    return { n, dot };
+  });
+  scored.sort((a, b) => b.dot - a.dot);
+
+  // Tiles within ~72° of the heading direction count as the leading edge.
+  const leading = scored.filter((s) => s.dot > 0.3).map((s) => s.n);
+  const trailing = scored.filter((s) => s.dot <= 0.3).map((s) => s.n);
+  if (leading.length === 0) return { leading: neighbours, trailing: [] };
+  return { leading, trailing };
+}
+
+// Heuristic for a slow / data-saver connection using the Network Information
+// API where available. On such links we only warm the leading edge and skip
+// the trailing tiles entirely.
+function isSlowConnection(): boolean {
+  const conn = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  if (!conn) return false;
+  if (conn.saveData) return true;
+  return /(^|-)2g$/.test(conn.effectiveType ?? "");
 }
 
 export function useRoutePlanner() {
@@ -92,6 +145,18 @@ export function useRoutePlanner() {
   const { isSignedIn } = useAuth();
   const [bbox, setBbox] = useState<string>("");
   const [debouncedBbox] = useDebounce(bbox, 500);
+
+  // Most recent pan direction reported by the map, used to prioritise which
+  // neighbouring tiles to pre-load. Kept in a ref so updating it doesn't
+  // re-render or re-run the pre-load effect on its own.
+  const panDirectionRef = useRef<{ dx: number; dy: number } | null>(null);
+  const handleViewportChange = useCallback(
+    (nextBbox: string, direction: { dx: number; dy: number } | null) => {
+      if (direction) panDirectionRef.current = direction;
+      setBbox(nextBbox);
+    },
+    [],
+  );
   
   const [selectedNodes, setSelectedNodes] = useState<NetworkNode[]>([]);
   const [routePlan, setRoutePlan] = useState<RoutePlan | null>(null);
@@ -127,18 +192,39 @@ export function useRoutePlanner() {
     const neighbours = neighbourBboxes(debouncedBbox);
     if (neighbours.length === 0) return;
 
+    // Prioritise the tiles in the direction of the most recent pan. The leading
+    // edge is fetched eagerly; the rest are warmed only after a short delay so a
+    // user who keeps panning cancels them before they ever start.
+    const { leading, trailing } = splitNeighboursByDirection(
+      neighbours,
+      panDirectionRef.current,
+    );
+    const slow = isSlowConnection();
+
+    const prefetch = (nbBbox: string) => {
+      void queryClient.prefetchQuery({
+        queryKey: getGetNetworkQueryKey({ bbox: nbBbox }),
+        queryFn: ({ signal }) => getNetwork({ bbox: nbBbox }, { signal }),
+        // Treat freshly pre-loaded tiles as fresh for a while so panning back
+        // and forth doesn't keep re-issuing the same neighbour fetches.
+        staleTime: 5 * 60 * 1000,
+      });
+    };
+
     let cancelled = false;
-    const run = () => {
+    let trailingTimeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    const runLeading = () => {
       if (cancelled) return;
-      for (const nbBbox of neighbours) {
-        void queryClient.prefetchQuery({
-          queryKey: getGetNetworkQueryKey({ bbox: nbBbox }),
-          queryFn: ({ signal }) => getNetwork({ bbox: nbBbox }, { signal }),
-          // Treat freshly pre-loaded tiles as fresh for a while so panning back
-          // and forth doesn't keep re-issuing the same neighbour fetches.
-          staleTime: 5 * 60 * 1000,
-        });
-      }
+      for (const nb of leading) prefetch(nb.bbox);
+
+      // Warm the remaining neighbours lazily, at lower priority. On slow or
+      // data-saver connections skip them entirely to cut background traffic.
+      if (trailing.length === 0 || slow) return;
+      trailingTimeoutId = setTimeout(() => {
+        if (cancelled) return;
+        for (const nb of trailing) prefetch(nb.bbox);
+      }, 1500);
     };
 
     const win = window as Window & {
@@ -148,9 +234,9 @@ export function useRoutePlanner() {
     let idleId: number | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (typeof win.requestIdleCallback === "function") {
-      idleId = win.requestIdleCallback(run);
+      idleId = win.requestIdleCallback(runLeading);
     } else {
-      timeoutId = setTimeout(run, 300);
+      timeoutId = setTimeout(runLeading, 300);
     }
 
     return () => {
@@ -159,6 +245,7 @@ export function useRoutePlanner() {
         win.cancelIdleCallback(idleId);
       }
       if (timeoutId !== undefined) clearTimeout(timeoutId);
+      if (trailingTimeoutId !== undefined) clearTimeout(trailingTimeoutId);
     };
   }, [debouncedBbox, networkData, isNetworkLoading, queryClient]);
 
@@ -336,6 +423,7 @@ export function useRoutePlanner() {
   return {
     bbox,
     setBbox,
+    handleViewportChange,
     networkData,
     isNetworkLoading,
     regions,
