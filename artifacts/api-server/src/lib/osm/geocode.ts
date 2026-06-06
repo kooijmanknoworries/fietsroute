@@ -35,7 +35,33 @@ interface NominatimItem {
   category?: string;
   type?: string;
   addresstype?: string;
+  importance?: number;
   boundingbox?: [string, string, string, string];
+}
+
+// Matches a leading "Gemeente" / "gem." prefix that users often type but that
+// is not part of the OpenStreetMap name (e.g. "Gemeente de Ronde Venen").
+const GEMEENTE_PREFIX = /^(gemeente|gem\.?)\s+/i;
+
+function normalizeMunicipalityQuery(query: string): string {
+  const cleaned = query.trim().replace(/\s+/g, " ");
+  const stripped = cleaned.replace(GEMEENTE_PREFIX, "").trim();
+  // Fall back to the original text if stripping leaves too little to search on.
+  return stripped.length >= 2 ? stripped : cleaned;
+}
+
+// Rank administrative areas (the actual gemeentes) above generic places, and
+// both above anything else, then use Nominatim's importance as a tie-breaker.
+// This keeps unrelated POIs (churches, graveyards, pharmacies) from crowding
+// out or hiding the municipality the user is looking for.
+function rankScore(item: NominatimItem): number {
+  let base = 0;
+  if (item.category === "boundary" && item.type === "administrative") {
+    base = 2;
+  } else if (item.category === "place") {
+    base = 1;
+  }
+  return base * 1000 + (item.importance ?? 0);
 }
 
 function mapItem(item: NominatimItem): MunicipalityResult | null {
@@ -67,22 +93,19 @@ function mapItem(item: NominatimItem): MunicipalityResult | null {
   };
 }
 
-export async function searchMunicipalities(
-  query: string,
-): Promise<MunicipalityResult[]> {
-  const normalized = query.trim().toLowerCase();
-  const cached = cache.get(normalized);
-  if (cached && cached.expires > Date.now()) {
-    return cached.value;
-  }
+const MAX_RESULTS = 8;
 
+async function fetchNominatim(
+  params: Record<string, string>,
+): Promise<NominatimItem[]> {
   const url = new URL(NOMINATIM_URL);
-  url.searchParams.set("q", query.trim());
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("countrycodes", "nl,be");
-  url.searchParams.set("limit", "8");
   url.searchParams.set("addressdetails", "0");
   url.searchParams.set("accept-language", "nl");
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
 
   const res = await fetch(url, {
     headers: {
@@ -95,12 +118,56 @@ export async function searchMunicipalities(
     throw new Error(`Nominatim request failed with status ${res.status}`);
   }
 
-  const data = (await res.json()) as NominatimItem[];
-  const results = data
-    .filter((item) => item.category === "boundary" || item.category === "place")
-    .map(mapItem)
-    .filter((r): r is MunicipalityResult => r !== null);
+  return (await res.json()) as NominatimItem[];
+}
 
-  cache.set(normalized, { expires: Date.now() + CACHE_TTL_MS, value: results });
+function toRankedResults(items: NominatimItem[]): MunicipalityResult[] {
+  const ranked = items
+    .filter((item) => item.category === "boundary" || item.category === "place")
+    .slice()
+    .sort((a, b) => rankScore(b) - rankScore(a));
+
+  // Drop duplicates that share a display name (e.g. a "city" and its
+  // "city_district" both named "Utrecht"), keeping the highest-ranked one.
+  const seen = new Set<string>();
+  const results: MunicipalityResult[] = [];
+  for (const item of ranked) {
+    const mapped = mapItem(item);
+    if (!mapped) continue;
+    const key = mapped.displayName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push(mapped);
+    if (results.length >= MAX_RESULTS) break;
+  }
+  return results;
+}
+
+export async function searchMunicipalities(
+  query: string,
+): Promise<MunicipalityResult[]> {
+  const normalized = normalizeMunicipalityQuery(query);
+  const cacheKey = normalized.toLowerCase();
+  const cached = cache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.value;
+  }
+
+  // Structured `city` search reliably returns administrative gemeentes even for
+  // partial names (e.g. "Ronde Venen" -> "De Ronde Venen") where free-text
+  // search only surfaces unrelated POIs.
+  let results = toRankedResults(
+    await fetchNominatim({ city: normalized, limit: "15" }),
+  );
+
+  // Fall back to a broad free-text search for anything the structured query
+  // can't resolve (raise the limit so a boundary isn't pushed off the list).
+  if (results.length === 0) {
+    results = toRankedResults(
+      await fetchNominatim({ q: normalized, limit: "20" }),
+    );
+  }
+
+  cache.set(cacheKey, { expires: Date.now() + CACHE_TTL_MS, value: results });
   return results;
 }
