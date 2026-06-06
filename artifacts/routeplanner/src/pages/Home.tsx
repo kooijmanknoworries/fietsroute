@@ -19,7 +19,8 @@ import {
   X,
   Pencil,
   LogIn,
-  LogOut
+  LogOut,
+  Globe
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -267,7 +268,10 @@ export default function Home() {
               <h1 className="text-xl font-bold tracking-tight">Fietsrouteplanner</h1>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              <div className="flex overflow-hidden rounded-md border border-primary-foreground/30 text-xs font-semibold">
+              <div className="flex items-center overflow-hidden rounded-md border border-primary-foreground/30 text-xs font-semibold">
+                <span className="flex items-center pl-1.5 pr-1 text-primary-foreground/80" aria-hidden="true">
+                  <Globe className="h-3.5 w-3.5" />
+                </span>
                 <button
                   type="button"
                   onClick={() => setLang("nl")}
