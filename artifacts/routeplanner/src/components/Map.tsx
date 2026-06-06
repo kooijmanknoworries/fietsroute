@@ -96,6 +96,10 @@ export default function Map({
         container: mapContainer.current,
         style: {
           version: 8,
+          // Free, keyless glyph host so text/symbol layers (the knooppunt
+          // numbers) can load their font. Without this, symbol layers render
+          // no text. Serves "Open Sans Regular" used by the node-number layer.
+          glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
           sources: {
             "raster-tiles": {
               type: "raster",
