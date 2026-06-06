@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { BoundingBox } from './boundingBox';
+import type { GeoJsonGeometry } from './geoJsonGeometry';
 
 export interface MunicipalityResult {
   id: string;
@@ -14,4 +15,5 @@ export interface MunicipalityResult {
   lat: number;
   lon: number;
   boundingBox: BoundingBox;
+  geometry?: GeoJsonGeometry;
 }

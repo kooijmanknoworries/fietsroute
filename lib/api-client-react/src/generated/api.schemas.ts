@@ -129,6 +129,15 @@ export interface BoundingBox {
   east: number;
 }
 
+/**
+ * A GeoJSON geometry (typically a Polygon or MultiPolygon) describing the municipality's administrative boundary, suitable for drawing on the map.
+
+ */
+export interface GeoJsonGeometry {
+  type: string;
+  coordinates: unknown[];
+}
+
 export interface MunicipalityResult {
   id: string;
   name: string;
@@ -136,6 +145,7 @@ export interface MunicipalityResult {
   lat: number;
   lon: number;
   boundingBox: BoundingBox;
+  geometry?: GeoJsonGeometry;
 }
 
 export type GetNetworkParams = {

@@ -9,6 +9,11 @@ export interface BoundingBox {
   east: number;
 }
 
+export interface GeoJsonGeometry {
+  type: string;
+  coordinates: unknown[];
+}
+
 export interface MunicipalityResult {
   id: string;
   name: string;
@@ -16,6 +21,7 @@ export interface MunicipalityResult {
   lat: number;
   lon: number;
   boundingBox: BoundingBox;
+  geometry?: GeoJsonGeometry;
 }
 
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
@@ -117,6 +123,7 @@ interface NominatimItem {
   addresstype?: string;
   importance?: number;
   boundingbox?: [string, string, string, string];
+  geojson?: { type?: string; coordinates?: unknown };
 }
 
 // Matches a leading "Gemeente" / "gem." prefix that users often type but that
@@ -163,6 +170,12 @@ function mapItem(item: NominatimItem): MunicipalityResult | null {
       ? `${item.osm_type}/${item.osm_id}`
       : String(item.place_id ?? `${lat},${lon}`);
   const name = item.name && item.name.trim() !== "" ? item.name : item.display_name ?? "";
+  const geometry =
+    item.geojson &&
+    typeof item.geojson.type === "string" &&
+    Array.isArray(item.geojson.coordinates)
+      ? { type: item.geojson.type, coordinates: item.geojson.coordinates }
+      : undefined;
   return {
     id,
     name,
@@ -170,6 +183,7 @@ function mapItem(item: NominatimItem): MunicipalityResult | null {
     lat,
     lon,
     boundingBox: { south, north, west, east },
+    ...(geometry ? { geometry } : {}),
   };
 }
 
@@ -183,6 +197,8 @@ async function fetchNominatim(
   url.searchParams.set("countrycodes", "nl,be");
   url.searchParams.set("addressdetails", "0");
   url.searchParams.set("accept-language", "nl");
+  // Fetch the administrative boundary polygon so the map can outline the area.
+  url.searchParams.set("polygon_geojson", "1");
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }

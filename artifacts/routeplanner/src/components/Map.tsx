@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { NetworkNode, NetworkSegment } from "@workspace/api-client-react";
+import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
 
 interface Bounds {
   south: number;
@@ -15,6 +15,7 @@ interface MapProps {
   selectedNodes: NetworkNode[];
   routeCoordinates: number[][] | null;
   importedCoordinates: number[][] | null;
+  boundaryGeometry?: GeoJsonGeometry | null;
   onBboxChange: (
     bbox: string,
     direction: { dx: number; dy: number } | null,
@@ -39,6 +40,7 @@ export default function Map({
   selectedNodes,
   routeCoordinates,
   importedCoordinates,
+  boundaryGeometry,
   onBboxChange,
   onNodeClick,
   flyToRegion,
@@ -104,6 +106,35 @@ export default function Map({
     const m = map.current;
 
     m.on("load", () => {
+      m.addSource("boundary", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      m.addLayer({
+        id: "boundary-fill",
+        type: "fill",
+        source: "boundary",
+        paint: {
+          "fill-color": "#2563eb",
+          "fill-opacity": 0.05
+        }
+      });
+      m.addLayer({
+        id: "boundary-line",
+        type: "line",
+        source: "boundary",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round"
+        },
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 2,
+          "line-opacity": 0.6,
+          "line-dasharray": [3, 2]
+        }
+      });
+
       m.addSource("segments", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
@@ -295,6 +326,35 @@ export default function Map({
       m.off("load", apply);
     };
   }, [fitBounds]);
+
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const apply = () => {
+      const boundarySource = m.getSource("boundary") as maplibregl.GeoJSONSource | undefined;
+      if (!boundarySource) return;
+      boundarySource.setData({
+        type: "FeatureCollection",
+        features: boundaryGeometry
+          ? [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: boundaryGeometry as unknown as GeoJSON.Geometry,
+              },
+            ]
+          : [],
+      });
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [boundaryGeometry]);
 
   useEffect(() => {
     if (!map.current || !map.current.isStyleLoaded()) return;

@@ -103,7 +103,11 @@ export const GeocodeMunicipalityResponseItem = zod.object({
   "north": zod.number(),
   "west": zod.number(),
   "east": zod.number()
-})
+}),
+  "geometry": zod.object({
+  "type": zod.string(),
+  "coordinates": zod.array(zod.unknown())
+}).optional().describe('A GeoJSON geometry (typically a Polygon or MultiPolygon) describing the municipality\'s administrative boundary, suitable for drawing on the map.\n')
 })
 export const GeocodeMunicipalityResponse = zod.array(GeocodeMunicipalityResponseItem)
 

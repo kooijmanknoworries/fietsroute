@@ -575,6 +575,20 @@ components:
         - north
         - west
         - east
+    GeoJsonGeometry:
+      type: object
+      description: >
+        A GeoJSON geometry (typically a Polygon or MultiPolygon) describing the
+        municipality's administrative boundary, suitable for drawing on the map.
+      properties:
+        type:
+          type: string
+        coordinates:
+          type: array
+          items: {}
+      required:
+        - type
+        - coordinates
     MunicipalityResult:
       type: object
       properties:
@@ -590,6 +604,8 @@ components:
           type: number
         boundingBox:
           $ref: "#/components/schemas/BoundingBox"
+        geometry:
+          $ref: "#/components/schemas/GeoJsonGeometry"
       required:
         - id
         - name

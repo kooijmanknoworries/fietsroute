@@ -11,6 +11,7 @@ export * from './boundingBox';
 export * from './claimSavedRoutesRequest';
 export * from './claimSavedRoutesResult';
 export * from './geocodeMunicipalityParams';
+export * from './geoJsonGeometry';
 export * from './getNetworkParams';
 export * from './healthStatus';
 export * from './municipalityResult';

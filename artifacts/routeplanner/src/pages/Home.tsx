@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Show, useUser, useClerk } from "@clerk/react";
 import { 
@@ -109,13 +109,25 @@ export default function Home() {
   const [routeName, setRouteName] = useState("");
   const [municipalityOpen, setMunicipalityOpen] = useState(false);
   const [fitBounds, setFitBounds] = useState<MunicipalityResult["boundingBox"] | null>(null);
+  const [boundaryGeometry, setBoundaryGeometry] = useState<MunicipalityResult["geometry"] | null>(
+    initialFavorite?.geometry ?? null,
+  );
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
   const initialBounds = initialFavorite?.boundingBox ?? null;
 
+  // Clear the municipality outline once the user shifts focus to a route
+  // (planning nodes or an imported GPX track).
+  useEffect(() => {
+    if (selectedNodes.length > 0 || importedCoordinates) {
+      setBoundaryGeometry(null);
+    }
+  }, [selectedNodes.length, importedCoordinates]);
+
   const handleSelectMunicipality = (m: MunicipalityResult) => {
     setFitBounds({ ...m.boundingBox });
+    setBoundaryGeometry(m.geometry ?? null);
     setMunicipalityOpen(false);
     setMunicipalityQuery("");
   };
@@ -126,6 +138,7 @@ export default function Home() {
       toast({ title: "Favorite removed", description: `"${m.name}" is no longer your start area.` });
     } else {
       saveFavorite(m);
+      setBoundaryGeometry(m.geometry ?? null);
       toast({ title: "Favorite set", description: `The map will open at "${m.name}" next time.` });
     }
   };
@@ -636,6 +649,7 @@ export default function Home() {
           selectedNodes={selectedNodes}
           routeCoordinates={routePlan?.coordinates || null}
           importedCoordinates={importedCoordinates}
+          boundaryGeometry={boundaryGeometry}
           onBboxChange={handleViewportChange}
           onNodeClick={handleNodeClick}
           flyToRegion={flyToRegion}
