@@ -21,6 +21,8 @@ import type {
 
 import type {
   ApiError,
+  ClaimSavedRoutesRequest,
+  ClaimSavedRoutesResult,
   GeocodeMunicipalityParams,
   GetNetworkParams,
   HealthStatus,
@@ -597,6 +599,79 @@ export const useSaveRoute = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSaveRouteMutationOptions(options));
+    }
+
+export const getClaimSavedRoutesUrl = () => {
+
+
+
+
+  return `/api/routes/claim`
+}
+
+/**
+ * Reassigns routes that were saved under an old per-browser anonymous owner key to the current signed-in user, so nothing saved before the first sign-in is lost. Returns how many routes were imported.
+
+ * @summary Claim routes saved anonymously before signing in
+ */
+export const claimSavedRoutes = async (claimSavedRoutesRequest: ClaimSavedRoutesRequest, options?: RequestInit): Promise<ClaimSavedRoutesResult> => {
+
+  return customFetch<ClaimSavedRoutesResult>(getClaimSavedRoutesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      claimSavedRoutesRequest,)
+  }
+);}
+
+
+
+
+export const getClaimSavedRoutesMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimSavedRoutes>>, TError,{data: BodyType<ClaimSavedRoutesRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimSavedRoutes>>, TError,{data: BodyType<ClaimSavedRoutesRequest>}, TContext> => {
+
+const mutationKey = ['claimSavedRoutes'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimSavedRoutes>>, {data: BodyType<ClaimSavedRoutesRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  claimSavedRoutes(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimSavedRoutesMutationResult = NonNullable<Awaited<ReturnType<typeof claimSavedRoutes>>>
+    export type ClaimSavedRoutesMutationBody = BodyType<ClaimSavedRoutesRequest>
+    export type ClaimSavedRoutesMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Claim routes saved anonymously before signing in
+ */
+export const useClaimSavedRoutes = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimSavedRoutes>>, TError,{data: BodyType<ClaimSavedRoutesRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimSavedRoutes>>,
+        TError,
+        {data: BodyType<ClaimSavedRoutesRequest>},
+        TContext
+      > => {
+      return useMutation(getClaimSavedRoutesMutationOptions(options));
     }
 
 export const getGetSavedRouteUrl = (id: string,) => {

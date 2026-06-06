@@ -4,3 +4,4 @@
 - [Overpass persistent cache](overpass-persistent-cache.md) — Overpass results cached in Postgres (`overpass_cache`) with 7-day TTL behind an in-memory L1; cache lives in `fetchOverpass`.
 - [Workspace db typecheck](workspace-db-typecheck.md) — after adding exports to `@workspace/db`, rebuild its `dist/*.d.ts` (`tsc -b lib/db/tsconfig.json`) or api-server typecheck fails on missing members.
 - [Saved routes ownership](saved-routes-ownership.md) — routes scoped per-browser via anonymous `x-owner-key` header (localStorage), not real auth; ownership column exists for future upgrade.
+- [Orval schema naming](orval-schema-naming.md) — response component schemas must not be named `<OperationId>Response` or codegen double-exports and tsc fails TS2308; use `...Result`.

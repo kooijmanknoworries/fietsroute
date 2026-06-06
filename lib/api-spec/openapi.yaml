@@ -201,6 +201,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /routes/claim:
+    post:
+      operationId: claimSavedRoutes
+      tags: [routes]
+      summary: Claim routes saved anonymously before signing in
+      description: >
+        Reassigns routes that were saved under an old per-browser anonymous
+        owner key to the current signed-in user, so nothing saved before the
+        first sign-in is lost. Returns how many routes were imported.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClaimSavedRoutesRequest"
+      responses:
+        "200":
+          description: The number of routes imported into the account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClaimSavedRoutesResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /routes/{id}:
     get:
       operationId: getSavedRoute
@@ -429,6 +457,24 @@ components:
           description: New user-provided name for the route.
       required:
         - name
+    ClaimSavedRoutesRequest:
+      type: object
+      properties:
+        anonymousKey:
+          type: string
+          description: >
+            The old per-browser anonymous owner key (UUID) previously stored in
+            the browser before sign-in was introduced.
+      required:
+        - anonymousKey
+    ClaimSavedRoutesResult:
+      type: object
+      properties:
+        claimed:
+          type: number
+          description: How many anonymous routes were imported into the account.
+      required:
+        - claimed
     SaveRouteRequest:
       type: object
       properties:

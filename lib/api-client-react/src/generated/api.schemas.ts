@@ -77,6 +77,17 @@ export interface UpdateSavedRouteRequest {
   name: string;
 }
 
+export interface ClaimSavedRoutesRequest {
+  /** The old per-browser anonymous owner key (UUID) previously stored in the browser before sign-in was introduced.
+   */
+  anonymousKey: string;
+}
+
+export interface ClaimSavedRoutesResult {
+  /** How many anonymous routes were imported into the account. */
+  claimed: number;
+}
+
 export interface SaveRouteRequest {
   /** User-provided name for the route. */
   name: string;

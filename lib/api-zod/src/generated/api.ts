@@ -150,6 +150,20 @@ export const SaveRouteBody = zod.object({
 
 
 /**
+ * Reassigns routes that were saved under an old per-browser anonymous owner key to the current signed-in user, so nothing saved before the first sign-in is lost. Returns how many routes were imported.
+
+ * @summary Claim routes saved anonymously before signing in
+ */
+export const ClaimSavedRoutesBody = zod.object({
+  "anonymousKey": zod.string().describe('The old per-browser anonymous owner key (UUID) previously stored in the browser before sign-in was introduced.\n')
+})
+
+export const ClaimSavedRoutesResponse = zod.object({
+  "claimed": zod.number().describe('How many anonymous routes were imported into the account.')
+})
+
+
+/**
  * @summary Get a saved route by id
  */
 export const GetSavedRouteParams = zod.object({

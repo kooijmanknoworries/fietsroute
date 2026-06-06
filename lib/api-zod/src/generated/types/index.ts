@@ -8,6 +8,8 @@
 
 export * from './apiError';
 export * from './boundingBox';
+export * from './claimSavedRoutesRequest';
+export * from './claimSavedRoutesResult';
 export * from './geocodeMunicipalityParams';
 export * from './getNetworkParams';
 export * from './healthStatus';

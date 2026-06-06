@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRoutePlanner } from "@/hooks/use-route-planner";
+import { useClaimAnonymousRoutes } from "@/hooks/use-claim-anonymous-routes";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
 
@@ -90,6 +91,13 @@ export default function Home() {
     saveFavorite,
     removeFavorite,
   } = useMunicipality();
+
+  const {
+    canClaim,
+    claim: claimAnonymousRoutes,
+    dismiss: dismissClaim,
+    isClaiming,
+  } = useClaimAnonymousRoutes();
 
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -153,6 +161,33 @@ export default function Home() {
       toast({
         title: "Rename failed",
         description: err instanceof Error ? err.message : "Could not rename the route.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleClaimRoutes = async () => {
+    try {
+      const count = await claimAnonymousRoutes();
+      if (count > 0) {
+        toast({
+          title: "Routes imported",
+          description:
+            count === 1
+              ? "1 route saved on this device is now in your account."
+              : `${count} routes saved on this device are now in your account.`,
+        });
+      } else {
+        toast({
+          title: "Nothing to import",
+          description: "No routes from this device were found.",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Import failed",
+        description:
+          err instanceof Error ? err.message : "Could not import your routes.",
         variant: "destructive",
       });
     }
@@ -669,6 +704,41 @@ export default function Home() {
                 <Pencil className="mr-2 h-4 w-4" />
               )}
               Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import-anonymous-routes Dialog (one-time, on first sign-in) */}
+      <Dialog
+        open={canClaim}
+        onOpenChange={(open) => {
+          if (!open && !isClaiming) dismissClaim();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import routes from this device?</DialogTitle>
+            <DialogDescription>
+              We found cycling routes you saved on this device before signing in.
+              Import them into your account so you can reach them from anywhere.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={dismissClaim}
+              disabled={isClaiming}
+            >
+              Not now
+            </Button>
+            <Button onClick={handleClaimRoutes} disabled={isClaiming}>
+              {isClaiming ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
+              Import routes
             </Button>
           </DialogFooter>
         </DialogContent>
