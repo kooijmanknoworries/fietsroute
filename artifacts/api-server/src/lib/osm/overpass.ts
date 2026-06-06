@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, lt } from "drizzle-orm";
 import { db, overpassCacheTable } from "@workspace/db";
 import { logger } from "../logger";
 
@@ -195,6 +195,35 @@ export async function fetchOverpass(bbox: Bbox): Promise<OverpassResult> {
   cache.set(key, { data, expires });
   await writePersistentCache(key, data, expires);
   return data;
+}
+
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+export async function sweepExpiredCache(): Promise<number> {
+  try {
+    const result = await db
+      .delete(overpassCacheTable)
+      .where(lt(overpassCacheTable.expiresAt, new Date()));
+    const removed = result.rowCount ?? 0;
+    if (removed > 0) {
+      logger.info({ removed }, "Swept expired overpass cache rows");
+    } else {
+      logger.debug("Overpass cache sweep found no expired rows");
+    }
+    return removed;
+  } catch (err) {
+    logger.warn({ err }, "Overpass cache sweep failed");
+    return 0;
+  }
+}
+
+export function startCacheSweeper(): NodeJS.Timeout {
+  void sweepExpiredCache();
+  const timer = setInterval(() => {
+    void sweepExpiredCache();
+  }, SWEEP_INTERVAL_MS);
+  timer.unref();
+  return timer;
 }
 
 export function haversineMeters(
