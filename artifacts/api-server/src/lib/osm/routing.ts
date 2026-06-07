@@ -1,9 +1,9 @@
 import {
-  fetchOverpass,
   haversineMeters,
   type Bbox,
   type OverpassResult,
 } from "./overpass";
+import { getNetworkForRoute } from "./dataset";
 
 export interface RouteRequestNode {
   id: string;
@@ -236,7 +236,7 @@ export async function planRoute(
     );
   }
 
-  const data = await fetchOverpass(bbox);
+  const data = await getNetworkForRoute(bbox);
   const graph = buildGraph(data);
 
   const legs: RouteLeg[] = [];

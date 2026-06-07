@@ -2,18 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { inArray } from "drizzle-orm";
-import { db, overpassCacheTable } from "@workspace/db";
+import {
+  db,
+  overpassCacheTable,
+  networkNodesTable,
+  networkSegmentsTable,
+} from "@workspace/db";
 import routeRouter from "./route";
 
-// planRoute fetches its cycling network from Overpass through fetchOverpass,
-// which reads an in-memory L1 cache and a persistent Postgres cache (keyed by
-// the rounded bbox) before honoring the mocked fetch. To keep each test
-// deterministic we (a) give every test a disjoint bbox so the in-memory cache
-// from a prior test can't shadow it, and (b) clear the persistent rows for the
-// bbox keys these tests exercise.
+// planRoute now reads from the preloaded network_nodes / network_segments tables
+// instead of hitting Overpass. Tests populate the DB with fixture data, and
+// clean up rows afterwards so they don't interfere with other suites.
 
-// Mirror overpass.ts cacheKey + routing.ts boundingBox (pad 0.08) so we can
-// delete the exact persistent cache rows these node sets produce.
 const ROUTE_PAD = 0.08;
 
 interface TestNode {
@@ -110,10 +110,84 @@ const TEST_CACHE_KEYS = [
   routeCacheKey(UNSNAPPABLE_NODES),
 ];
 
-async function clearOverpassCache(): Promise<void> {
+const ALL_TEST_NODE_IDS = [
+  "1", "2", "3", "11", "12", "13", "14", "21", "22", "31", "32",
+];
+const ALL_TEST_SEG_IDS = ["100", "200", "201", "300"];
+
+async function clearFixtures(): Promise<void> {
   await db
     .delete(overpassCacheTable)
     .where(inArray(overpassCacheTable.key, TEST_CACHE_KEYS));
+  await db
+    .delete(networkNodesTable)
+    .where(inArray(networkNodesTable.id, ALL_TEST_NODE_IDS));
+  await db
+    .delete(networkSegmentsTable)
+    .where(inArray(networkSegmentsTable.id, ALL_TEST_SEG_IDS));
+}
+
+async function insertConnectedNetwork(): Promise<void> {
+  await db.insert(networkNodesTable).values([
+    { id: "1", ref: "1", lat: 52.0, lon: 5.0 },
+    { id: "2", ref: "2", lat: 52.001, lon: 5.001 },
+    { id: "3", ref: "3", lat: 52.002, lon: 5.002 },
+  ]);
+  await db.insert(networkSegmentsTable).values({
+    id: "100",
+    coordinates: [[5.0, 52.0], [5.001, 52.001], [5.002, 52.002]],
+    nodeIds: [1, 2, 3],
+    minLat: 52.0,
+    maxLat: 52.002,
+    minLon: 5.0,
+    maxLon: 5.002,
+  });
+}
+
+async function insertDisconnectedNetwork(): Promise<void> {
+  await db.insert(networkNodesTable).values([
+    { id: "11", ref: "11", lat: 52.0, lon: 6.0 },
+    { id: "12", ref: "12", lat: 52.001, lon: 6.001 },
+    { id: "13", ref: "13", lat: 52.1, lon: 6.1 },
+    { id: "14", ref: "14", lat: 52.101, lon: 6.101 },
+  ]);
+  await db.insert(networkSegmentsTable).values([
+    {
+      id: "200",
+      coordinates: [[6.0, 52.0], [6.001, 52.001]],
+      nodeIds: [11, 12],
+      minLat: 52.0,
+      maxLat: 52.001,
+      minLon: 6.0,
+      maxLon: 6.001,
+    },
+    {
+      id: "201",
+      coordinates: [[6.1, 52.1], [6.101, 52.101]],
+      nodeIds: [13, 14],
+      minLat: 52.1,
+      maxLat: 52.101,
+      minLon: 6.1,
+      maxLon: 6.101,
+    },
+  ]);
+}
+
+async function insertUnsnappableNetwork(): Promise<void> {
+  // Network lies ~3.4km east of requested nodes (0.05 deg lon at lat 52)
+  await db.insert(networkNodesTable).values([
+    { id: "31", ref: "31", lat: 52.0, lon: 7.05 },
+    { id: "32", ref: "32", lat: 52.001, lon: 7.051 },
+  ]);
+  await db.insert(networkSegmentsTable).values({
+    id: "300",
+    coordinates: [[7.05, 52.0], [7.051, 52.001]],
+    nodeIds: [31, 32],
+    minLat: 52.0,
+    maxLat: 52.001,
+    minLon: 7.05,
+    maxLon: 7.051,
+  });
 }
 
 function buildApp(): Express {
@@ -146,12 +220,12 @@ function mockOverpass(elements: unknown[]): void {
 describe("POST /api/route", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
-    await clearOverpassCache();
+    await clearFixtures();
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await clearOverpassCache();
+    await clearFixtures();
   });
 
   it("returns 400 when the body is invalid", async () => {
@@ -169,7 +243,7 @@ describe("POST /api/route", () => {
   });
 
   it("returns a route connecting the requested nodes with coordinates", async () => {
-    mockOverpass(CONNECTED_ELEMENTS);
+    await insertConnectedNetwork();
 
     const res = await request(buildApp())
       .post("/api/route")
@@ -189,7 +263,7 @@ describe("POST /api/route", () => {
   });
 
   it("returns 422 when no path connects the requested nodes", async () => {
-    mockOverpass(DISCONNECTED_ELEMENTS);
+    await insertDisconnectedNetwork();
 
     const res = await request(buildApp())
       .post("/api/route")
@@ -200,33 +274,25 @@ describe("POST /api/route", () => {
   });
 
   it("returns 400 when the selected nodes span too large an area", async () => {
-    // Rejected by the area guard before any Overpass call, so no mock is set.
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-
     const res = await request(buildApp())
       .post("/api/route")
       .send({ nodes: TOO_FAR_NODES });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/too far apart/i);
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("returns 400 when more than the maximum number of nodes are selected", async () => {
-    // Rejected by the node-count guard before any Overpass call.
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-
     const res = await request(buildApp())
       .post("/api/route")
       .send({ nodes: TOO_MANY_NODES });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/too many nodes/i);
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("returns 422 when a node cannot be snapped onto the network", async () => {
-    mockOverpass(UNSNAPPABLE_ELEMENTS);
+    await insertUnsnappableNetwork();
 
     const res = await request(buildApp())
       .post("/api/route")

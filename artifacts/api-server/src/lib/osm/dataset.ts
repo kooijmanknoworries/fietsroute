@@ -1,7 +1,13 @@
 import { and, gte, lt, lte, sql } from "drizzle-orm";
 import { db, networkNodesTable, networkSegmentsTable } from "@workspace/db";
 import { logger } from "../logger";
-import { fetchOverpassUncached, type Bbox } from "./overpass";
+import {
+  fetchOverpassUncached,
+  type Bbox,
+  type OverpassNode,
+  type OverpassWay,
+  type OverpassResult,
+} from "./overpass";
 import type { NetworkData, NetworkNode, NetworkSegment } from "./network";
 
 // Bounding box covering the Netherlands + Belgium. The importer walks this in
@@ -152,6 +158,55 @@ export async function getNetworkFromDataset(bbox: Bbox): Promise<NetworkData> {
   return { nodes, segments, truncated: false };
 }
 
+// Serve data for route planning in the format the router expects.
+// Used instead of live Overpass so routes compute instantly from the
+// pre-loaded NL+BE dataset.
+export async function getNetworkForRoute(bbox: Bbox): Promise<OverpassResult> {
+  const nodeRows = await db
+    .select()
+    .from(networkNodesTable)
+    .where(
+      and(
+        gte(networkNodesTable.lat, bbox.minLat),
+        lte(networkNodesTable.lat, bbox.maxLat),
+        gte(networkNodesTable.lon, bbox.minLon),
+        lte(networkNodesTable.lon, bbox.maxLon),
+      ),
+    );
+
+  const segRows = await db
+    .select()
+    .from(networkSegmentsTable)
+    .where(
+      and(
+        gte(networkSegmentsTable.maxLat, bbox.minLat),
+        lte(networkSegmentsTable.minLat, bbox.maxLat),
+        gte(networkSegmentsTable.maxLon, bbox.minLon),
+        lte(networkSegmentsTable.minLon, bbox.maxLon),
+      ),
+    );
+
+  const nodes = new Map<number, OverpassNode>();
+  for (const r of nodeRows) {
+    nodes.set(Number(r.id), {
+      id: Number(r.id),
+      lat: r.lat,
+      lon: r.lon,
+      rcnRef: r.ref,
+    });
+  }
+
+  const ways: OverpassWay[] = [];
+  for (const r of segRows) {
+    const ids = r.nodeIds as number[];
+    if (ids.length >= 2) {
+      ways.push({ id: Number(r.id), nodes: ids });
+    }
+  }
+
+  return { nodes, ways };
+}
+
 interface NodeInsert {
   id: string;
   ref: string;
@@ -162,6 +217,7 @@ interface NodeInsert {
 interface SegmentInsert {
   id: string;
   coordinates: number[][];
+  nodeIds: number[];
   minLat: number;
   maxLat: number;
   minLon: number;
@@ -258,9 +314,13 @@ async function importChunk(
   const segRows: SegmentInsert[] = [];
   for (const way of ways) {
     const coords: number[][] = [];
+    const nodeIds: number[] = [];
     for (const nid of way.nodes) {
       const n = nodes.get(nid);
-      if (n) coords.push([n.lon, n.lat]);
+      if (n) {
+        coords.push([n.lon, n.lat]);
+        nodeIds.push(nid);
+      }
     }
     if (coords.length < 2) continue;
     let minLat = Infinity;
@@ -276,6 +336,7 @@ async function importChunk(
     segRows.push({
       id: String(way.id),
       coordinates: coords,
+      nodeIds,
       minLat,
       maxLat,
       minLon,

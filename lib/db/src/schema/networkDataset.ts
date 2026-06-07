@@ -39,7 +39,7 @@ export const networkSegmentsTable = pgTable(
     coordinates: jsonb("coordinates").notNull(),
     // Node IDs in order along the way. Stored so the route planner can rebuild
     // the graph for Dijkstra without re-querying Overpass.
-    nodeIds: jsonb("node_ids").notNull(),
+    nodeIds: jsonb("node_ids").notNull().default("[]"),
     // Bounding box of the polyline, stored so a viewport bbox query can find
     // every segment that intersects it via index range scans.
     minLat: doublePrecision("min_lat").notNull(),
