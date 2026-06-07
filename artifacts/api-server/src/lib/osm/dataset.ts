@@ -3,12 +3,18 @@ import { db, networkNodesTable, networkSegmentsTable } from "@workspace/db";
 import { logger } from "../logger";
 import {
   fetchOverpassUncached,
+  fetchOverpass,
   type Bbox,
   type OverpassNode,
   type OverpassWay,
   type OverpassResult,
 } from "./overpass";
 import type { NetworkData, NetworkNode, NetworkSegment } from "./network";
+
+// Minimal node count for the dataset to be considered useful for routing.
+// The full NL+BE network has ~8,000+ nodes; below this we fall back to live
+// Overpass so the route planner keeps working while the import is still running.
+const DATASET_MIN_NODE_COUNT = 3000;
 
 // Bounding box covering the Netherlands + Belgium. The importer walks this in
 // fixed chunks and pulls the full cycling node network (rcn) into our own
@@ -161,7 +167,21 @@ export async function getNetworkFromDataset(bbox: Bbox): Promise<NetworkData> {
 // Serve data for route planning in the format the router expects.
 // Used instead of live Overpass so routes compute instantly from the
 // pre-loaded NL+BE dataset.
+// Falls back to live Overpass if the dataset is still being imported and
+// doesn't yet contain enough nodes to be useful.
 export async function getNetworkForRoute(bbox: Bbox): Promise<OverpassResult> {
+  const totalNodes = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(networkNodesTable);
+
+  if (totalNodes[0].count < DATASET_MIN_NODE_COUNT) {
+    logger.debug(
+      { dbCount: totalNodes[0].count, threshold: DATASET_MIN_NODE_COUNT },
+      "Dataset too small for routing, falling back to live Overpass",
+    );
+    return fetchOverpass(bbox);
+  }
+
   const nodeRows = await db
     .select()
     .from(networkNodesTable)
