@@ -50,7 +50,7 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // How often to retry chunks that failed during the last import. Much shorter
 // than the full weekly re-import so coverage gaps from Overpass blips heal
 // within an hour rather than waiting for the next full pass.
-const RETRY_FAILED_MS = 60 * 60 * 1000;
+const RETRY_FAILED_MS = 10 * 60 * 1000;
 
 // Cache the (cheap) readiness probe so we don't hit the DB on every request.
 const READY_CACHE_MS = 30 * 1000;

@@ -134,7 +134,7 @@ async function writePersistentCache(
 
 function buildQuery(b: Bbox): string {
   const area = `${b.minLat},${b.minLon},${b.maxLat},${b.maxLon}`;
-  return `[out:json][timeout:90];
+  return `[out:json][timeout:30];
 (
   node["rcn_ref"](${area});
   relation["network"="rcn"]["route"="bicycle"](${area});
@@ -143,9 +143,13 @@ function buildQuery(b: Bbox): string {
 out body;`;
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function requestOverpass(query: string): Promise<OverpassElement[]> {
   let lastError: unknown;
   for (const endpoint of OVERPASS_ENDPOINTS) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
     try {
       const res = await fetch(endpoint, {
         method: "POST",
@@ -155,7 +159,9 @@ async function requestOverpass(query: string): Promise<OverpassElement[]> {
           "User-Agent": "Fietsrouteplanner/1.0 (cycling node route planner)",
         },
         body: "data=" + encodeURIComponent(query),
+        signal: ctrl.signal,
       });
+      clearTimeout(timer);
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         lastError = new Error(
@@ -166,6 +172,7 @@ async function requestOverpass(query: string): Promise<OverpassElement[]> {
       const json = (await res.json()) as { elements?: OverpassElement[] };
       return json.elements ?? [];
     } catch (err) {
+      clearTimeout(timer);
       lastError = err;
       logger.warn({ err, endpoint }, "Overpass endpoint failed, trying next");
     }
