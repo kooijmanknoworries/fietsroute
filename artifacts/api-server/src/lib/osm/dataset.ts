@@ -167,8 +167,8 @@ export async function getNetworkFromDataset(bbox: Bbox): Promise<NetworkData> {
 // Serve data for route planning in the format the router expects.
 // Used instead of live Overpass so routes compute instantly from the
 // pre-loaded NL+BE dataset.
-// Falls back to live Overpass if the dataset is still being imported and
-// doesn't yet contain enough nodes to be useful.
+// Falls back to live Overpass if the dataset is still being imported,
+// or if the requested area contains too few nodes to route reliably.
 export async function getNetworkForRoute(bbox: Bbox): Promise<OverpassResult> {
   const totalNodes = await db
     .select({ count: sql<number>`count(*)` })
@@ -205,6 +205,17 @@ export async function getNetworkForRoute(bbox: Bbox): Promise<OverpassResult> {
         lte(networkSegmentsTable.minLon, bbox.maxLon),
       ),
     );
+
+  // If the requested area contains no nodes/segments, we are outside the
+  // pre-loaded region. Fall back to live Overpass so the user can still
+  // plan routes.
+  if (nodeRows.length < 2 || segRows.length < 1) {
+    logger.debug(
+      { nodes: nodeRows.length, segs: segRows.length, bbox },
+      "Sparse dataset coverage for this bbox, falling back to live Overpass",
+    );
+    return fetchOverpass(bbox);
+  }
 
   const nodes = new Map<number, OverpassNode>();
   for (const r of nodeRows) {
@@ -272,6 +283,7 @@ async function upsertSegments(rows: SegmentInsert[]): Promise<void> {
         target: networkSegmentsTable.id,
         set: {
           coordinates: sql`excluded.coordinates`,
+          nodeIds: sql`excluded.node_ids`,
           minLat: sql`excluded.min_lat`,
           maxLat: sql`excluded.max_lat`,
           minLon: sql`excluded.min_lon`,

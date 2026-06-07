@@ -111,9 +111,12 @@ const TEST_CACHE_KEYS = [
 ];
 
 const ALL_TEST_NODE_IDS = [
-  "1", "2", "3", "11", "12", "13", "14", "21", "22", "31", "32",
+  "1", "2", "3", "41", "42", "43", "11", "12", "13", "14", "51", "52",
+  "21", "22", "31", "32", "61", "62", "63",
 ];
-const ALL_TEST_SEG_IDS = ["100", "200", "201", "300"];
+const ALL_TEST_SEG_IDS = [
+  "100", "401", "402", "200", "201", "501", "300", "601", "602",
+];
 
 async function clearFixtures(): Promise<void> {
   await db
@@ -128,20 +131,45 @@ async function clearFixtures(): Promise<void> {
 }
 
 async function insertConnectedNetwork(): Promise<void> {
+  // Insert enough nodes + segments so the sparse-coverage fallback
+  // (>=5 nodes/segments) is not triggered.
   await db.insert(networkNodesTable).values([
     { id: "1", ref: "1", lat: 52.0, lon: 5.0 },
     { id: "2", ref: "2", lat: 52.001, lon: 5.001 },
     { id: "3", ref: "3", lat: 52.002, lon: 5.002 },
+    { id: "41", ref: "41", lat: 52.003, lon: 5.003 },
+    { id: "42", ref: "42", lat: 52.004, lon: 5.004 },
+    { id: "43", ref: "43", lat: 52.005, lon: 5.005 },
   ]);
-  await db.insert(networkSegmentsTable).values({
-    id: "100",
-    coordinates: [[5.0, 52.0], [5.001, 52.001], [5.002, 52.002]],
-    nodeIds: [1, 2, 3],
-    minLat: 52.0,
-    maxLat: 52.002,
-    minLon: 5.0,
-    maxLon: 5.002,
-  });
+  await db.insert(networkSegmentsTable).values([
+    {
+      id: "100",
+      coordinates: [[5.0, 52.0], [5.001, 52.001], [5.002, 52.002]],
+      nodeIds: [1, 2, 3],
+      minLat: 52.0,
+      maxLat: 52.002,
+      minLon: 5.0,
+      maxLon: 5.002,
+    },
+    {
+      id: "401",
+      coordinates: [[5.003, 52.003], [5.004, 52.004]],
+      nodeIds: [41, 42],
+      minLat: 52.003,
+      maxLat: 52.004,
+      minLon: 5.003,
+      maxLon: 5.004,
+    },
+    {
+      id: "402",
+      coordinates: [[5.004, 52.004], [5.005, 52.005]],
+      nodeIds: [42, 43],
+      minLat: 52.004,
+      maxLat: 52.005,
+      minLon: 5.004,
+      maxLon: 5.005,
+    },
+  ]);
 }
 
 async function insertDisconnectedNetwork(): Promise<void> {
@@ -150,6 +178,8 @@ async function insertDisconnectedNetwork(): Promise<void> {
     { id: "12", ref: "12", lat: 52.001, lon: 6.001 },
     { id: "13", ref: "13", lat: 52.1, lon: 6.1 },
     { id: "14", ref: "14", lat: 52.101, lon: 6.101 },
+    { id: "51", ref: "51", lat: 52.002, lon: 6.002 },
+    { id: "52", ref: "52", lat: 52.003, lon: 6.003 },
   ]);
   await db.insert(networkSegmentsTable).values([
     {
@@ -170,6 +200,15 @@ async function insertDisconnectedNetwork(): Promise<void> {
       minLon: 6.1,
       maxLon: 6.101,
     },
+    {
+      id: "501",
+      coordinates: [[6.002, 52.002], [6.003, 52.003]],
+      nodeIds: [51, 52],
+      minLat: 52.002,
+      maxLat: 52.003,
+      minLon: 6.002,
+      maxLon: 6.003,
+    },
   ]);
 }
 
@@ -178,16 +217,39 @@ async function insertUnsnappableNetwork(): Promise<void> {
   await db.insert(networkNodesTable).values([
     { id: "31", ref: "31", lat: 52.0, lon: 7.05 },
     { id: "32", ref: "32", lat: 52.001, lon: 7.051 },
+    { id: "61", ref: "61", lat: 52.002, lon: 7.052 },
+    { id: "62", ref: "62", lat: 52.003, lon: 7.053 },
+    { id: "63", ref: "63", lat: 52.004, lon: 7.054 },
   ]);
-  await db.insert(networkSegmentsTable).values({
-    id: "300",
-    coordinates: [[7.05, 52.0], [7.051, 52.001]],
-    nodeIds: [31, 32],
-    minLat: 52.0,
-    maxLat: 52.001,
-    minLon: 7.05,
-    maxLon: 7.051,
-  });
+  await db.insert(networkSegmentsTable).values([
+    {
+      id: "300",
+      coordinates: [[7.05, 52.0], [7.051, 52.001]],
+      nodeIds: [31, 32],
+      minLat: 52.0,
+      maxLat: 52.001,
+      minLon: 7.05,
+      maxLon: 7.051,
+    },
+    {
+      id: "601",
+      coordinates: [[7.052, 52.002], [7.053, 52.003]],
+      nodeIds: [61, 62],
+      minLat: 52.002,
+      maxLat: 52.003,
+      minLon: 7.052,
+      maxLon: 7.053,
+    },
+    {
+      id: "602",
+      coordinates: [[7.053, 52.003], [7.054, 52.004]],
+      nodeIds: [62, 63],
+      minLat: 52.003,
+      maxLat: 52.004,
+      minLon: 7.053,
+      maxLon: 7.054,
+    },
+  ]);
 }
 
 function buildApp(): Express {

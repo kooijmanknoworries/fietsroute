@@ -25,3 +25,15 @@ fietsknooppunt.app's instant panning.
 - Tests that exercise the live fallback must clear the persistent Postgres
   Overpass cache for the test region first — it survives across runs, so a stale
   cached tile makes "expect fetch called" flaky/order-dependent.
+
+**Per-request fallback threshold:**
+- The `getNetworkForRoute` function checks the global node count (needs ≥3000
+  for dataset to be "ready"). Once ready, it also does a per-request check:
+  if the queried bbox returns fewer than 2 nodes or 1 segment, it falls back to
+  live Overpass. This covers coverage holes and routes outside the pre-loaded
+  region.
+
+**Upsert completeness:**
+- When updating an existing segment on conflict, the `nodeIds` column must be
+  included in the conflict `set` alongside `coordinates` and bounds, or the
+  stored topology becomes stale when OSM ways are re-ordered.
