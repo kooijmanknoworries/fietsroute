@@ -17,13 +17,13 @@ describe("street-style persistence", () => {
     localStorage.clear();
   });
 
-  it("defaults to osm when nothing is stored", () => {
-    expect(getStreetStyle()).toBe("osm");
+  it("defaults to voyager when nothing is stored", () => {
+    expect(getStreetStyle()).toBe("voyager");
   });
 
-  it("defaults to osm when an invalid value is stored", () => {
+  it("defaults to voyager when an invalid value is stored", () => {
     localStorage.setItem(STREET_STYLE_KEY, "not-a-style");
-    expect(getStreetStyle()).toBe("osm");
+    expect(getStreetStyle()).toBe("voyager");
   });
 
   it("round-trips every supported style through localStorage", () => {
