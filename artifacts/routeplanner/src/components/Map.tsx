@@ -383,7 +383,7 @@ export default function Map({
 
       // Hide the cycling nodes (knooppunten) once the visible map area is wider
       // than this, so the map stays readable when zoomed far out.
-      const MAX_NODE_VISIBLE_KM = 10;
+      const MAX_NODE_VISIBLE_KM = 50;
       const updateNodeVisibility = () => {
         const bounds = m.getBounds();
         const centreLat = (bounds.getNorth() + bounds.getSouth()) / 2;

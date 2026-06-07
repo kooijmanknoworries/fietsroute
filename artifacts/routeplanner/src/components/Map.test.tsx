@@ -77,6 +77,9 @@ vi.mock("maplibre-gl", () => {
     addLayer(layer: Record<string, unknown>) {
       addedLayers.push(layer);
     }
+    getLayer(id: string) {
+      return addedLayers.find((l) => (l as { id?: string }).id === id);
+    }
     setFeatureState() {}
     setLayoutProperty(layerId: string, property: string, value: unknown) {
       layoutCalls.push({ layerId, property, value });
