@@ -38,6 +38,8 @@ interface OverpassElement {
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.openstreetmap.fr/api/interpreter",
+  "https://overpass.osm.ch/api/interpreter",
 ];
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
