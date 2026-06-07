@@ -1,4 +1,4 @@
-import { and, gte, lte, sql } from "drizzle-orm";
+import { and, gte, lt, lte, sql } from "drizzle-orm";
 import { db, networkNodesTable, networkSegmentsTable } from "@workspace/db";
 import { logger } from "../logger";
 import { fetchOverpassUncached, type Bbox } from "./overpass";
@@ -35,6 +35,11 @@ const STARTUP_DELAY_MS = 15 * 1000;
 // How often to re-check staleness and refresh if needed.
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+// How often to retry chunks that failed during the last import. Much shorter
+// than the full weekly re-import so coverage gaps from Overpass blips heal
+// within an hour rather than waiting for the next full pass.
+const RETRY_FAILED_MS = 60 * 60 * 1000;
+
 // Cache the (cheap) readiness probe so we don't hit the DB on every request.
 const READY_CACHE_MS = 30 * 1000;
 
@@ -46,6 +51,14 @@ export const DATASET_MAX_AREA_DEG2 = 4.0;
 // Above this many nodes in view we report truncation rather than shipping a
 // huge payload the client can't usefully render.
 const DATASET_NODE_CAP = 8000;
+
+// Chunks that failed during the last import run, keyed by "minLat,minLon"
+// so they can be identified and scheduled for a fast retry.
+const failedChunks = new Map<string, Bbox>();
+
+function chunkKey(b: Bbox): string {
+  return `${b.minLat},${b.minLon}`;
+}
 
 function round(n: number): number {
   return Number(n.toFixed(4));
@@ -193,11 +206,101 @@ async function upsertSegments(rows: SegmentInsert[]): Promise<void> {
   }
 }
 
+// Delete nodes inside a chunk's bbox that weren't updated in this import pass.
+// A node is a point, so it belongs to exactly one chunk — safe to prune per-chunk.
+async function pruneChunkNodes(chunk: Bbox, before: Date): Promise<number> {
+  const deleted = await db
+    .delete(networkNodesTable)
+    .where(
+      and(
+        gte(networkNodesTable.lat, chunk.minLat),
+        lte(networkNodesTable.lat, chunk.maxLat),
+        gte(networkNodesTable.lon, chunk.minLon),
+        lte(networkNodesTable.lon, chunk.maxLon),
+        lt(networkNodesTable.updatedAt, before),
+      ),
+    )
+    .returning({ id: networkNodesTable.id });
+  return deleted.length;
+}
+
+// Delete segments that weren't touched anywhere in this full import pass.
+// Segments can span chunk boundaries so we only prune them globally after all
+// chunks succeed, not per-chunk.
+async function pruneStaleSegments(before: Date): Promise<number> {
+  const deleted = await db
+    .delete(networkSegmentsTable)
+    .where(lt(networkSegmentsTable.updatedAt, before))
+    .returning({ id: networkSegmentsTable.id });
+  return deleted.length;
+}
+
+// Import a single chunk: fetch from Overpass, upsert nodes/segments, then
+// prune nodes in that chunk that weren't seen (they no longer exist in OSM).
+async function importChunk(
+  chunk: Bbox,
+  importStart: Date,
+): Promise<{ nodes: number; segs: number }> {
+  const { nodes, ways } = await fetchOverpassUncached(chunk);
+
+  const nodeRows: NodeInsert[] = [];
+  for (const n of nodes.values()) {
+    if (n.rcnRef) {
+      nodeRows.push({
+        id: String(n.id),
+        ref: n.rcnRef,
+        lat: n.lat,
+        lon: n.lon,
+      });
+    }
+  }
+
+  const segRows: SegmentInsert[] = [];
+  for (const way of ways) {
+    const coords: number[][] = [];
+    for (const nid of way.nodes) {
+      const n = nodes.get(nid);
+      if (n) coords.push([n.lon, n.lat]);
+    }
+    if (coords.length < 2) continue;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    let minLon = Infinity;
+    let maxLon = -Infinity;
+    for (const [lon, lat] of coords) {
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+    }
+    segRows.push({
+      id: String(way.id),
+      coordinates: coords,
+      minLat,
+      maxLat,
+      minLon,
+      maxLon,
+    });
+  }
+
+  if (nodeRows.length > 0) await upsertNodes(nodeRows);
+  if (segRows.length > 0) await upsertSegments(segRows);
+
+  // Prune nodes in this chunk that weren't seen — they were removed from OSM.
+  const pruned = await pruneChunkNodes(chunk, importStart);
+  if (pruned > 0) {
+    logger.info({ chunk, pruned }, "Pruned stale nodes from chunk");
+  }
+
+  return { nodes: nodeRows.length, segs: segRows.length };
+}
+
 let importing = false;
 
 // Pull the whole NL+BE network chunk by chunk and upsert it into the dataset
-// tables. Resilient: a failing chunk is logged and skipped so a single Overpass
-// hiccup never aborts the whole import.
+// tables. Resilient: a failing chunk is logged, recorded for fast retry, and
+// skipped so a single Overpass hiccup never aborts the whole import.
+// After all chunks complete without error, stale segments are also pruned.
 export async function importNetworkDataset(): Promise<void> {
   if (importing) {
     logger.info("Network dataset import already in progress, skipping");
@@ -210,64 +313,34 @@ export async function importNetworkDataset(): Promise<void> {
   let failed = 0;
   let nodeCount = 0;
   let segCount = 0;
+  const importStart = new Date();
   logger.info({ chunks: chunks.length }, "Starting network dataset import");
 
   try {
     for (const chunk of chunks) {
       try {
-        const { nodes, ways } = await fetchOverpassUncached(chunk);
-
-        const nodeRows: NodeInsert[] = [];
-        for (const n of nodes.values()) {
-          if (n.rcnRef) {
-            nodeRows.push({
-              id: String(n.id),
-              ref: n.rcnRef,
-              lat: n.lat,
-              lon: n.lon,
-            });
-          }
-        }
-
-        const segRows: SegmentInsert[] = [];
-        for (const way of ways) {
-          const coords: number[][] = [];
-          for (const nid of way.nodes) {
-            const n = nodes.get(nid);
-            if (n) coords.push([n.lon, n.lat]);
-          }
-          if (coords.length < 2) continue;
-          let minLat = Infinity;
-          let maxLat = -Infinity;
-          let minLon = Infinity;
-          let maxLon = -Infinity;
-          for (const [lon, lat] of coords) {
-            if (lat < minLat) minLat = lat;
-            if (lat > maxLat) maxLat = lat;
-            if (lon < minLon) minLon = lon;
-            if (lon > maxLon) maxLon = lon;
-          }
-          segRows.push({
-            id: String(way.id),
-            coordinates: coords,
-            minLat,
-            maxLat,
-            minLon,
-            maxLon,
-          });
-        }
-
-        if (nodeRows.length > 0) await upsertNodes(nodeRows);
-        if (segRows.length > 0) await upsertSegments(segRows);
+        const result = await importChunk(chunk, importStart);
+        failedChunks.delete(chunkKey(chunk));
         imported++;
-        nodeCount += nodeRows.length;
-        segCount += segRows.length;
+        nodeCount += result.nodes;
+        segCount += result.segs;
       } catch (err) {
         failed++;
+        failedChunks.set(chunkKey(chunk), chunk);
         logger.warn({ err, chunk }, "Failed to import network chunk");
       }
       await sleep(IMPORT_THROTTLE_MS);
     }
+
+    // Segments can span chunk boundaries so they're pruned globally only when
+    // every chunk succeeded (no coverage holes from failed chunks).
+    if (failed === 0) {
+      const prunedSegs = await pruneStaleSegments(importStart);
+      if (prunedSegs > 0) {
+        logger.info({ prunedSegs }, "Pruned stale segments after full import");
+      }
+    }
+
     // Force the next readiness probe to re-read now that rows exist.
     readyCache = null;
   } finally {
@@ -278,6 +351,28 @@ export async function importNetworkDataset(): Promise<void> {
     { imported, failed, nodeCount, segCount },
     "Network dataset import complete",
   );
+}
+
+// Retry only the chunks that failed during the last import pass. Runs on a
+// short interval so coverage gaps from Overpass outages heal within an hour
+// rather than waiting for the next full weekly re-import.
+async function retryFailedChunks(): Promise<void> {
+  if (importing || failedChunks.size === 0) return;
+
+  const toRetry = [...failedChunks.values()];
+  logger.info({ count: toRetry.length }, "Retrying failed network chunks");
+
+  for (const chunk of toRetry) {
+    const retryStart = new Date();
+    try {
+      await importChunk(chunk, retryStart);
+      failedChunks.delete(chunkKey(chunk));
+      logger.info({ chunk }, "Retried network chunk successfully");
+    } catch (err) {
+      logger.warn({ err, chunk }, "Retry of network chunk still failing");
+    }
+    await sleep(IMPORT_THROTTLE_MS);
+  }
 }
 
 async function isDatasetStale(): Promise<boolean> {
@@ -308,7 +403,9 @@ async function maybeImport(): Promise<void> {
 }
 
 // Schedule the initial import (after a short delay) and a periodic staleness
-// check. Disabled entirely via DISABLE_NETWORK_PRELOAD=true.
+// check. A faster retry loop targets only failed chunks so coverage gaps heal
+// quickly without re-running the full import. Disabled entirely via
+// DISABLE_NETWORK_PRELOAD=true.
 export function startNetworkPreload(): void {
   if (process.env["DISABLE_NETWORK_PRELOAD"] === "true") {
     logger.info("Network dataset preload disabled via DISABLE_NETWORK_PRELOAD");
@@ -323,4 +420,10 @@ export function startNetworkPreload(): void {
     void maybeImport();
   }, CHECK_INTERVAL_MS);
   interval.unref();
+
+  // Retry failed chunks much more often than the full weekly re-import.
+  const retry = setInterval(() => {
+    void retryFailedChunks();
+  }, RETRY_FAILED_MS);
+  retry.unref();
 }
