@@ -471,12 +471,37 @@ async function isDatasetStale(): Promise<boolean> {
   }
 }
 
+// A dataset is incomplete if the node count is clearly below the expected full
+// NL+BE network size (~8,000+). This catches aborted imports (e.g., server
+// restart mid-import) where the data is "fresh" but not full.
+const DATASET_INCOMPLETE_THRESHOLD = 6000;
+
+async function isDatasetIncomplete(): Promise<boolean> {
+  try {
+    const rows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(networkNodesTable);
+    return rows[0].count < DATASET_INCOMPLETE_THRESHOLD;
+  } catch (err) {
+    logger.warn({ err }, "Dataset completeness check failed");
+    return false;
+  }
+}
+
 async function maybeImport(): Promise<void> {
   try {
-    if (await isDatasetStale()) {
+    const stale = await isDatasetStale();
+    const incomplete = await isDatasetIncomplete();
+    if (stale || incomplete) {
+      if (incomplete && !stale) {
+        logger.info(
+          { incomplete },
+          "Dataset incomplete, forcing re-import",
+        );
+      }
       await importNetworkDataset();
     } else {
-      logger.debug("Network dataset is fresh, skipping import");
+      logger.debug("Network dataset is fresh and complete, skipping import");
     }
   } catch (err) {
     logger.warn({ err }, "Network dataset refresh check failed");
