@@ -301,16 +301,6 @@ export default function Home() {
                   EN
                 </button>
               </div>
-              <Show when="signed-out">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 shrink-0"
-                  onClick={() => setLocation("/sign-in")}
-                >
-                  <LogIn className="mr-1.5 h-4 w-4" /> {t("auth.signIn")}
-                </Button>
-              </Show>
             </div>
           </div>
           <p className="text-sm opacity-90">{t("app.subtitle")}</p>
@@ -689,6 +679,19 @@ export default function Home() {
           </div>
 
         </div>
+
+        <Show when="signed-out">
+          <div className="p-4 border-t border-border bg-card">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setLocation("/sign-in")}
+            >
+              <LogIn className="mr-2 h-4 w-4" /> {t("auth.signIn")}
+            </Button>
+          </div>
+        </Show>
       </div>
 
       {/* Map Area */}
