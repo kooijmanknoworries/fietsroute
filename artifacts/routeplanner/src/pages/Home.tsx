@@ -304,23 +304,6 @@ export default function Home() {
             </div>
           </div>
           <p className="text-sm opacity-90">{t("app.subtitle")}</p>
-          <Show when="signed-in">
-            <div className="mt-2 flex items-center gap-2 min-w-0">
-              {user?.primaryEmailAddress?.emailAddress && (
-                <span className="text-xs opacity-90 truncate">
-                  {user.primaryEmailAddress.emailAddress}
-                </span>
-              )}
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-8 shrink-0"
-                onClick={() => signOut({ redirectUrl: basePath || "/" })}
-              >
-                <LogOut className="mr-1.5 h-4 w-4" /> {t("auth.signOut")}
-              </Button>
-            </div>
-          </Show>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -568,16 +551,8 @@ export default function Home() {
               <Bookmark className="h-4 w-4" /> {t("saved.title")}
             </h3>
             <Show when="signed-out">
-              <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center space-y-3">
+              <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
                 <p>{t("saved.signInPrompt")}</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setLocation("/sign-in")}
-                >
-                  <LogIn className="mr-2 h-4 w-4" /> {t("auth.signIn")}
-                </Button>
               </div>
             </Show>
             <Show when="signed-in">
@@ -680,8 +655,8 @@ export default function Home() {
 
         </div>
 
-        <Show when="signed-out">
-          <div className="p-4 border-t border-border bg-card">
+        <div className="p-4 border-t border-border bg-card">
+          <Show when="signed-out">
             <Button
               variant="outline"
               size="sm"
@@ -690,8 +665,18 @@ export default function Home() {
             >
               <LogIn className="mr-2 h-4 w-4" /> {t("auth.signIn")}
             </Button>
-          </div>
-        </Show>
+          </Show>
+          <Show when="signed-in">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => signOut({ redirectUrl: basePath || "/" })}
+            >
+              <LogOut className="mr-2 h-4 w-4" /> {t("auth.signOut")}
+            </Button>
+          </Show>
+        </div>
       </div>
 
       {/* Map Area */}
