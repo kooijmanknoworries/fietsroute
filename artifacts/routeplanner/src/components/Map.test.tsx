@@ -138,7 +138,8 @@ const baseProps = {
 
 const BASE_LAYER_STORAGE_KEY = "fietsrouteplanner.baseLayer";
 
-// The default street style is "voyager" (see map-view.ts getStreetStyle).
+// The default street style is "voyager" (CARTO) — see getStreetStyle in
+// lib/map-view.ts — so that is the street layer visible on a fresh load.
 const STREET_LAYER = "street-voyager-layer";
 
 function visibilityOf(style: MapOptions["style"], layerId: string) {
@@ -355,7 +356,7 @@ describe("Map", () => {
     );
 
     // Open the style picker (only available while the street base is shown).
-    // The default look is Voyager, so that is the button label.
+    // The default look is Voyager (CARTO), so that is the button label.
     fireEvent.click(screen.getByRole("button", { name: /Voyager/ }));
 
     const menu = screen.getByRole("menu");

@@ -8,7 +8,7 @@ Overpass query results (cycling node network + bicycle route ways) are cached in
 
 **Why:** the in-memory cache was lost on every restart and the first load of each area took ~14s. The persistent layer makes repeat visits load in tens of milliseconds even after a restart, and shields the free Overpass service.
 
-**How to apply:** TTL is 7 days (the rcn node network changes rarely). `OverpassResult.nodes` is a `Map`, so it is serialized to/from an array of nodes for jsonb storage. All DB calls are wrapped in try/catch so a DB outage degrades to live fetching rather than breaking the endpoint. Both `getNetworkData` and `planRoute` benefit since both route through `fetchOverpass`.
+**How to apply:** TTL is 7 days (the rcn node network changes rarely). **Empty results (no nodes, no ways) are never written to the persistent cache** and get only a ~5-min in-memory TTL — empty 200s happen during outages/rate-limits (and from region-limited mirrors) and must not poison a week of cache. `OverpassResult.nodes` is a `Map`, so it is serialized to/from an array of nodes for jsonb storage. All DB calls are wrapped in try/catch so a DB outage degrades to live fetching rather than breaking the endpoint. Both `getNetworkData` and `planRoute` benefit since both route through `fetchOverpass`.
 
 **Fresh-environment gotcha:** an isolated task environment's database may not have the `overpass_cache` table yet — symptom is repeated warn logs `relation "overpass_cache" does not exist` (the failed INSERT error dumps the full jsonb params, looking like a giant blob). Fix by running `pnpm --filter @workspace/db run push`. The try/catch hides it as warnings rather than failing requests, so it's easy to miss.
 

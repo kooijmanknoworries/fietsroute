@@ -321,6 +321,10 @@ describe("POST /api/route", () => {
 
   it("returns a route connecting the requested nodes with coordinates", async () => {
     await insertConnectedNetwork();
+    // The router uses the dataset tables when they hold enough rows, and falls
+    // back to live Overpass otherwise (DATASET_MIN_NODE_COUNT). Mock the
+    // fallback with the same network so the test passes on either path.
+    mockOverpass(CONNECTED_ELEMENTS);
 
     const res = await request(buildApp())
       .post("/api/route")
@@ -341,6 +345,9 @@ describe("POST /api/route", () => {
 
   it("returns 422 when no path connects the requested nodes", async () => {
     await insertDisconnectedNetwork();
+    // Same-network mock so the live-Overpass fallback path behaves like the
+    // dataset path (see the connected-route test above).
+    mockOverpass(DISCONNECTED_ELEMENTS);
 
     const res = await request(buildApp())
       .post("/api/route")
@@ -370,6 +377,9 @@ describe("POST /api/route", () => {
 
   it("returns 422 when a node cannot be snapped onto the network", async () => {
     await insertUnsnappableNetwork();
+    // Same-network mock so the live-Overpass fallback path behaves like the
+    // dataset path (see the connected-route test above).
+    mockOverpass(UNSNAPPABLE_ELEMENTS);
 
     const res = await request(buildApp())
       .post("/api/route")

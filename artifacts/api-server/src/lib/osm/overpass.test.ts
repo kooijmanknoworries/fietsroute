@@ -25,7 +25,20 @@ const FORCE_KEY = "9.400,49.400,9.500,49.500";
 const EMPTY_BBOX: Bbox = { minLon: 9.6, minLat: 49.6, maxLon: 9.7, maxLat: 49.7 };
 const EMPTY_KEY = "9.600,49.600,9.700,49.700";
 
-const TEST_CACHE_KEYS = [HIT_KEY, EXPIRED_KEY, FORCE_KEY, EMPTY_KEY];
+// Distinct from EMPTY_BBOX: the empty-result test above leaves an empty entry
+// in the module-level L1 cache for its bbox, which would shadow the persistent
+// row this test seeds.
+const POISONED_BBOX: Bbox = {
+  minLon: 9.8,
+  minLat: 49.8,
+  maxLon: 9.9,
+  maxLat: 49.9,
+};
+const POISONED_KEY = "9.800,49.800,9.900,49.900";
+
+const TEST_CACHE_KEYS = [HIT_KEY, EXPIRED_KEY, FORCE_KEY, EMPTY_KEY, POISONED_KEY];
+
+const EMPTY_DATA = { nodes: [], ways: [] };
 
 // A serialized OverpassResult ({ nodes, ways }) the way writePersistentCache
 // stores it. The node id here (999) never appears in the mocked upstream
@@ -150,6 +163,7 @@ describe("fetchOverpass caching", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(spy as typeof fetch);
 
     const result = await fetchOverpass(EMPTY_BBOX);
+    expect(spy).toHaveBeenCalledTimes(1);
     expect(result.nodes.size).toBe(0);
     expect(result.ways.length).toBe(0);
 
@@ -165,6 +179,32 @@ describe("fetchOverpass caching", () => {
     const second = await fetchOverpass(EMPTY_BBOX);
     expect(second.nodes.size).toBe(0);
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a poisoned empty persistent row and fetches fresh data", async () => {
+    // Simulate a row poisoned during an Overpass outage: empty payload with a
+    // still-valid TTL. The read path must treat it as a miss so the mocked
+    // upstream is queried and its fresh data replaces the empty row.
+    await seedPersistent(
+      POISONED_KEY,
+      EMPTY_DATA,
+      new Date(Date.now() + 60 * 60 * 1000),
+    );
+
+    const spy = mockOverpass();
+    const result = await fetchOverpass(POISONED_BBOX);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect([...result.nodes.keys()]).toEqual([FRESH_NODE_ID]);
+
+    // The fresh (non-empty) result is persisted over the poisoned row.
+    const rows = await db
+      .select()
+      .from(overpassCacheTable)
+      .where(inArray(overpassCacheTable.key, [POISONED_KEY]));
+    expect(rows).toHaveLength(1);
+    const stored = rows[0].data as { nodes: unknown[] };
+    expect(stored.nodes.length).toBeGreaterThan(0);
   });
 });
 
@@ -219,6 +259,19 @@ describe("sweepExpiredCache", () => {
 
     // Exactly the two expired rows were deleted; the still-valid row survives.
     expect(removed).toBe(2);
+    expect(await remainingSweepKeys()).toEqual([SWEEP_VALID_KEY]);
+  });
+
+  it("purges empty-payload rows even when they have not expired", async () => {
+    await sweepExpiredCache();
+
+    const future = new Date(Date.now() + 60 * 60 * 1000);
+    await seedPersistent(SWEEP_EXPIRED_KEY_A, { nodes: [], ways: [] }, future);
+    await seedPersistent(SWEEP_VALID_KEY, STALE_DATA, future);
+
+    const removed = await sweepExpiredCache();
+
+    expect(removed).toBe(1);
     expect(await remainingSweepKeys()).toEqual([SWEEP_VALID_KEY]);
   });
 

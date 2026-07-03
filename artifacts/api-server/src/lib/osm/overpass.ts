@@ -1,4 +1,4 @@
-import { eq, lt } from "drizzle-orm";
+import { eq, lt, sql } from "drizzle-orm";
 import { db, overpassCacheTable } from "@workspace/db";
 import { logger } from "../logger";
 
@@ -43,18 +43,20 @@ export interface OverpassRelationMember {
   geometry?: { lat: number; lon: number }[];
 }
 
+// Note: overpass.osm.ch is deliberately excluded — it only serves Switzerland
+// and returns a valid-but-empty 200 for NL/BE bboxes, which poisoned the cache
+// with empty results when the main endpoints were down.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://overpass.openstreetmap.fr/api/interpreter",
-  "https://overpass.osm.ch/api/interpreter",
 ];
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-// Empty results are suspect: they usually mean Overpass was rate-limited or
-// degraded rather than "no cycling network here". Keep them only briefly in
-// the in-memory cache and never persist them, so recovery is fast.
-const EMPTY_RESULT_TTL_MS = 2 * 60 * 1000;
+// Empty results are suspect (Overpass outages/rate limits can return empty
+// payloads with a 200). Cache them only briefly in memory and never persist,
+// so a transient outage can't blank tiles for a whole week.
+const EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function isEmptyResult(data: OverpassResult): boolean {
   return data.nodes.size === 0 && data.ways.length === 0;
@@ -121,7 +123,21 @@ async function readPersistentCache(
         );
       return null;
     }
-    return deserialize(row.data as SerializedResult);
+    const data = deserialize(row.data as SerializedResult);
+    // Defensive: empty rows should never be persisted (see fetchOverpass),
+    // but rows poisoned during past outages may still exist. Treat them as a
+    // miss and delete them so a fresh fetch replaces them.
+    if (isEmptyResult(data)) {
+      logger.warn({ key }, "Ignoring empty persistent cache row, deleting it");
+      void db
+        .delete(overpassCacheTable)
+        .where(eq(overpassCacheTable.key, key))
+        .catch((err) =>
+          logger.warn({ err, key }, "Failed to delete empty cache row"),
+        );
+      return null;
+    }
+    return data;
   } catch (err) {
     logger.warn({ err, key }, "Persistent cache read failed");
     return null;
@@ -247,7 +263,7 @@ export async function fetchOverpass(
 
   const data = parseElements(await requestOverpass(buildQuery(bbox)));
   if (isEmptyResult(data)) {
-    cache.set(key, { data, expires: now + EMPTY_RESULT_TTL_MS });
+    cache.set(key, { data, expires: now + EMPTY_CACHE_TTL_MS });
     return data;
   }
   const expires = now + CACHE_TTL_MS;
@@ -260,10 +276,17 @@ const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 export async function sweepExpiredCache(): Promise<number> {
   try {
-    const result = await db
+    const expiredResult = await db
       .delete(overpassCacheTable)
       .where(lt(overpassCacheTable.expiresAt, new Date()));
-    const removed = result.rowCount ?? 0;
+    // Also purge empty payloads: they should never be persisted (see
+    // fetchOverpass), but rows poisoned during past outages may still exist.
+    const emptyResult = await db
+      .delete(overpassCacheTable)
+      .where(
+        sql`jsonb_array_length(${overpassCacheTable.data}->'nodes') = 0 AND jsonb_array_length(${overpassCacheTable.data}->'ways') = 0`,
+      );
+    const removed = (expiredResult.rowCount ?? 0) + (emptyResult.rowCount ?? 0);
     if (removed > 0) {
       logger.info({ removed }, "Swept expired overpass cache rows");
     } else {
