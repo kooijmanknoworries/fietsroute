@@ -43,6 +43,14 @@ const OVERPASS_ENDPOINTS = [
 ];
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Empty results are suspect: they usually mean Overpass was rate-limited or
+// degraded rather than "no cycling network here". Keep them only briefly in
+// the in-memory cache and never persist them, so recovery is fast.
+const EMPTY_RESULT_TTL_MS = 2 * 60 * 1000;
+
+function isEmptyResult(data: OverpassResult): boolean {
+  return data.nodes.size === 0 && data.ways.length === 0;
+}
 
 interface CacheEntry {
   data: OverpassResult;
@@ -230,6 +238,10 @@ export async function fetchOverpass(
   }
 
   const data = parseElements(await requestOverpass(buildQuery(bbox)));
+  if (isEmptyResult(data)) {
+    cache.set(key, { data, expires: now + EMPTY_RESULT_TTL_MS });
+    return data;
+  }
   const expires = now + CACHE_TTL_MS;
   cache.set(key, { data, expires });
   await writePersistentCache(key, data, expires);

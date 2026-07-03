@@ -13,6 +13,15 @@ import networkRouter from "./network";
 const SINGLE_TILE_KEY = "5.000,52.000,5.100,52.100";
 const TEST_CACHE_KEYS = [SINGLE_TILE_KEY];
 
+// The route prefers the preloaded network dataset once network_nodes has any
+// rows (real imported data or rows seeded by other test files sharing this
+// DB), which would shadow the mocked Overpass responses below. Force the live
+// tile path so these tests exercise the Overpass fetch/cache behavior.
+vi.mock("../lib/osm/dataset", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/osm/dataset")>();
+  return { ...actual, isDatasetReady: async () => false };
+});
+
 async function clearOverpassCache(): Promise<void> {
   await db
     .delete(overpassCacheTable)

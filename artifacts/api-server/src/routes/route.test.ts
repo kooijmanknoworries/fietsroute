@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { inArray } from "drizzle-orm";
@@ -13,6 +13,13 @@ import routeRouter from "./route";
 // planRoute now reads from the preloaded network_nodes / network_segments tables
 // instead of hitting Overpass. Tests populate the DB with fixture data, and
 // clean up rows afterwards so they don't interfere with other suites.
+
+// The routing dataset path normally requires a minimum global node count (a
+// partially imported shared DB would otherwise fall back to live Overpass and
+// ignore the fixtures). Override the threshold so the tests are deterministic
+// regardless of import progress. Restored in afterAll to avoid env leakage.
+const PREV_MIN_NODE_COUNT = process.env.DATASET_MIN_NODE_COUNT;
+process.env.DATASET_MIN_NODE_COUNT = "0";
 
 const ROUTE_PAD = 0.08;
 
@@ -288,6 +295,14 @@ describe("POST /api/route", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await clearFixtures();
+  });
+
+  afterAll(() => {
+    if (PREV_MIN_NODE_COUNT === undefined) {
+      delete process.env.DATASET_MIN_NODE_COUNT;
+    } else {
+      process.env.DATASET_MIN_NODE_COUNT = PREV_MIN_NODE_COUNT;
+    }
   });
 
   it("returns 400 when the body is invalid", async () => {

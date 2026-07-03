@@ -169,14 +169,26 @@ export async function getNetworkFromDataset(bbox: Bbox): Promise<NetworkData> {
 // pre-loaded NL+BE dataset.
 // Falls back to live Overpass if the dataset is still being imported,
 // or if the requested area contains too few nodes to route reliably.
+// The global-count threshold can be overridden via env (used by tests to make
+// the dataset path deterministic regardless of shared-DB import progress).
+function minNodeCountForRouting(): number {
+  const raw = process.env.DATASET_MIN_NODE_COUNT;
+  if (raw !== undefined && raw.trim().length > 0) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return DATASET_MIN_NODE_COUNT;
+}
+
 export async function getNetworkForRoute(bbox: Bbox): Promise<OverpassResult> {
   const totalNodes = await db
     .select({ count: sql<number>`count(*)` })
     .from(networkNodesTable);
 
-  if (totalNodes[0].count < DATASET_MIN_NODE_COUNT) {
+  const minCount = minNodeCountForRouting();
+  if (totalNodes[0].count < minCount) {
     logger.debug(
-      { dbCount: totalNodes[0].count, threshold: DATASET_MIN_NODE_COUNT },
+      { dbCount: totalNodes[0].count, threshold: minCount },
       "Dataset too small for routing, falling back to live Overpass",
     );
     return fetchOverpass(bbox);

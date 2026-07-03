@@ -40,3 +40,14 @@ middleware setting `req.log = console` before mounting the router, or error path
 **Shared dev DB:** tests hit the real `DATABASE_URL`. Generate unique owner keys
 (`randomUUID()`), track inserted row ids, and delete them in `afterAll` — never assert
 on absolute row counts.
+
+**Shared-DB state can shadow fixtures:** tests exercising the Overpass/dataset code
+paths must pin the path explicitly, or the shared dev DB's import progress silently
+flips behavior. `network.test.ts` mocks `../lib/osm/dataset` with `isDatasetReady:
+false`; `route.test.ts` sets `process.env.DATASET_MIN_NODE_COUNT = "0"` (env override
+in `getNetworkForRoute`, restored in `afterAll`) so seeded fixtures are used instead
+of falling back to live Overpass when the dataset is partially imported.
+
+**Full-suite runs can be killed (exit -1)** under memory/lock pressure — run test
+files individually with `timeout 90 npx vitest run <file>` and pipe output to a file
+first, then grep it.
