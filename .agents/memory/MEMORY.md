@@ -11,3 +11,5 @@
 - [MapLibre attribution gating](maplibre-attribution.md) — AttributionControl shows a source's attribution only while a layer using it is visible; toggling layer visibility:none drops it (verified v4.7.1).
 - [Geocode/persistent cache test isolation](geocode-cache-test-isolation.md) — searchMunicipalities reads Postgres cache before honoring mocked fetch; tests must clear geocode_cache rows for their keys or warmed/real data shadows the mock.
 - [vitest setup](api-server-vitest.md) — committed tests: api-server (vitest+supertest, mock `@clerk/express` getAuth, set `req.log`, clean up shared DB); routeplanner (vitest+jsdom, mock `@clerk/react`+api-client, test hooks not Home); validation `pnpm -r run test`.
+- [Artifact workflow names](workflow-names.md) — restart dev servers via `restartWorkflow` with names like `artifacts/api-server: API Server`; plain titles fail. Use `listWorkflows()` first.
+- [LF-routes overlay caching](lf-routes-overlay.md) — ncn relations fetched via `out geom(bbox)` and cached in `overpass_cache` under `lf:`-prefixed keys; new query kinds sharing that table need their own prefix.

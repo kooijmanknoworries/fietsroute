@@ -67,6 +67,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /lf-routes:
+    get:
+      operationId: getLfRoutes
+      tags: [network]
+      summary: Get long-distance LF cycling routes for a bounding box
+      description: >
+        Returns the long-distance cycling routes (Landelijke Fietsroutes,
+        network=ncn route relations such as the LF Maasroute) that pass
+        through the given bounding box, as line geometries with the route's
+        name and ref. Data is sourced from OpenStreetMap and cached.
+      parameters:
+        - name: bbox
+          in: query
+          required: true
+          description: "Bounding box as minLon,minLat,maxLon,maxLat (WGS84)."
+          schema:
+            type: string
+      responses:
+        "200":
+          description: LF routes data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LfRoutesData"
+        "400":
+          description: Invalid bounding box
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Upstream data source error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /route:
     post:
       operationId: planRoute
@@ -375,6 +411,48 @@ components:
       required:
         - nodes
         - segments
+        - truncated
+    LfRoute:
+      type: object
+      description: >
+        A long-distance LF cycling route (OSM ncn route relation) with the
+        parts of its geometry that intersect the requested bounding box.
+      properties:
+        id:
+          type: string
+          description: Stable OSM relation id.
+        name:
+          type: string
+          description: 'The route name (e.g. "LF Maasroute"), when tagged.'
+        ref:
+          type: string
+          description: 'The short route code (e.g. "LF3"), when tagged.'
+        lines:
+          type: array
+          description: >
+            The route geometry as one or more line strings of ordered
+            [lon, lat] pairs (a MultiLineString-style coordinate array).
+          items:
+            type: array
+            items:
+              type: array
+              items:
+                type: number
+      required:
+        - id
+        - lines
+    LfRoutesData:
+      type: object
+      properties:
+        routes:
+          type: array
+          items:
+            $ref: "#/components/schemas/LfRoute"
+        truncated:
+          type: boolean
+          description: True if the area was too large and results were limited.
+      required:
+        - routes
         - truncated
     RouteRequestNode:
       type: object

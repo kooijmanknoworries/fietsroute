@@ -1,5 +1,6 @@
 const STORAGE_KEY = "fietsrouteplanner.baseLayer";
 const STREET_STYLE_KEY = "fietsrouteplanner.streetStyle";
+const LF_ROUTES_KEY = "fietsrouteplanner.lfRoutes";
 
 export type BaseLayer = "map" | "satellite";
 
@@ -62,6 +63,26 @@ export function getStreetStyle(): StreetStyle {
 export function setStreetStyle(style: StreetStyle): void {
   try {
     localStorage.setItem(STREET_STYLE_KEY, style);
+  } catch {
+    // ignore persistence errors (e.g. storage disabled)
+  }
+}
+
+/**
+ * Returns whether the LF-routes (long-distance cycling routes) overlay is
+ * enabled. Off by default; the choice persists across sessions.
+ */
+export function getLfRoutesEnabled(): boolean {
+  try {
+    return localStorage.getItem(LF_ROUTES_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function setLfRoutesEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(LF_ROUTES_KEY, enabled ? "on" : "off");
   } catch {
     // ignore persistence errors (e.g. storage disabled)
   }

@@ -1,12 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe } from "lucide-react";
-import { NetworkNode, NetworkSegment, GeoJsonGeometry } from "@workspace/api-client-react";
+import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe, Route } from "lucide-react";
+import {
+  NetworkNode,
+  NetworkSegment,
+  GeoJsonGeometry,
+  useGetLfRoutes,
+  getGetLfRoutesQueryKey,
+} from "@workspace/api-client-react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   getBaseLayer,
   setBaseLayer,
   getStreetStyle,
   setStreetStyle,
+  getLfRoutesEnabled,
+  setLfRoutesEnabled,
   STREET_STYLES,
   type BaseLayer,
   type StreetStyle,
@@ -123,6 +132,25 @@ export default function Map({
   streetStyleRef.current = streetStyle;
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const styleMenuRef = useRef<HTMLDivElement>(null);
+  const [lfEnabled, setLfEnabled] = useState<boolean>(() => getLfRoutesEnabled());
+  const lfEnabledRef = useRef<boolean>(lfEnabled);
+  lfEnabledRef.current = lfEnabled;
+  const [lfBbox, setLfBbox] = useState<string | null>(null);
+
+  // LF-routes overlay data: only fetched while the toggle is on, keyed on the
+  // same snapped viewport bbox as the network query so server-side caching is
+  // shared across pans within the same tiles.
+  const { data: lfRoutesData } = useGetLfRoutes(
+    { bbox: lfBbox ?? "" },
+    {
+      query: {
+        enabled: lfEnabled && !!lfBbox,
+        queryKey: getGetLfRoutesQueryKey({ bbox: lfBbox ?? "" }),
+        placeholderData: keepPreviousData,
+        staleTime: 5 * 60 * 1000,
+      },
+    },
+  );
 
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
@@ -286,6 +314,63 @@ export default function Map({
         }
       });
 
+      // LF-routes overlay: long-distance cycling routes shown above the
+      // knooppunten segments but below the planned route. Hidden until the
+      // user enables the toggle; data is filled in by a separate effect.
+      m.addSource("lf-routes", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      m.addLayer({
+        id: "lf-routes-layer",
+        type: "line",
+        source: "lf-routes",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round",
+          visibility: lfEnabledRef.current ? "visible" : "none"
+        },
+        paint: {
+          "line-color": "#d97706",
+          "line-width": 3,
+          "line-opacity": 0.75
+        }
+      });
+
+      // Hovering (or tapping, on touch devices) an LF-route line shows its
+      // name/ref in a small popup near the cursor.
+      const lfPopup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 10,
+        maxWidth: "260px",
+      });
+      const showLfPopup = (e: maplibregl.MapLayerMouseEvent) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        const name = feature.properties?.name as string | undefined;
+        const ref = feature.properties?.ref as string | undefined;
+        const label =
+          name && ref && !name.includes(ref)
+            ? `${ref} ${name}`
+            : name || ref;
+        if (!label) return;
+        const el = document.createElement("div");
+        el.className = "text-xs font-medium";
+        el.textContent = label;
+        lfPopup.setLngLat(e.lngLat).setDOMContent(el).addTo(m);
+      };
+      m.on("mouseenter", "lf-routes-layer", (e) => {
+        m.getCanvas().style.cursor = "pointer";
+        showLfPopup(e);
+      });
+      m.on("mousemove", "lf-routes-layer", showLfPopup);
+      m.on("mouseleave", "lf-routes-layer", () => {
+        m.getCanvas().style.cursor = "";
+        lfPopup.remove();
+      });
+      m.on("click", "lf-routes-layer", showLfPopup);
+
       m.addSource("imported-route", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
@@ -419,6 +504,7 @@ export default function Map({
         const east = snap(bounds.getEast(), "ceil");
         const north = snap(bounds.getNorth(), "ceil");
         const bboxStr = `${west},${south},${east},${north}`;
+        setLfBbox(bboxStr);
 
         // Work out which way the user just panned by comparing the new view
         // centre with the previous settled centre. The resulting (dx, dy)
@@ -470,6 +556,67 @@ export default function Map({
       m.off("load", apply);
     };
   }, [baseLayer, streetStyle]);
+
+  // Keep the LF-routes layer visibility in sync with the toggle.
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const apply = () => {
+      if (m.getLayer("lf-routes-layer")) {
+        m.setLayoutProperty(
+          "lf-routes-layer",
+          "visibility",
+          lfEnabled ? "visible" : "none",
+        );
+      }
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [lfEnabled]);
+
+  // Push fetched LF-route geometries into the map source. One feature per
+  // route line keeps hover hit-testing simple while carrying name/ref props.
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const apply = () => {
+      const source = m.getSource("lf-routes") as maplibregl.GeoJSONSource | undefined;
+      if (!source) return;
+      source.setData({
+        type: "FeatureCollection",
+        features: (lfRoutesData?.routes ?? []).flatMap((route) =>
+          route.lines.map((line, i) => ({
+            type: "Feature" as const,
+            id: `${route.id}-${i}`,
+            properties: { id: route.id, name: route.name, ref: route.ref },
+            geometry: { type: "LineString" as const, coordinates: line },
+          })),
+        ),
+      });
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [lfRoutesData]);
+
+  const toggleLfRoutes = useCallback(() => {
+    setLfEnabled((prev) => {
+      const next = !prev;
+      setLfRoutesEnabled(next);
+      return next;
+    });
+  }, []);
 
   const toggleBaseLayer = useCallback((next: BaseLayer) => {
     setBaseLayerState(next);
@@ -652,6 +799,20 @@ export default function Map({
       )}
       {!mapError && (
         <div className="absolute right-3 top-3 z-10 flex items-start gap-2">
+          <button
+            type="button"
+            onClick={toggleLfRoutes}
+            aria-pressed={lfEnabled}
+            title={t("map.lfRoutesTitle")}
+            className={
+              "flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium shadow-md backdrop-blur transition-colors " +
+              (lfEnabled
+                ? "bg-primary text-primary-foreground"
+                : "bg-card/95 text-muted-foreground hover:bg-accent")
+            }
+          >
+            <Route className="h-3.5 w-3.5" /> {t("map.lfRoutes")}
+          </button>
           {baseLayer === "map" && (
             <div className="relative" ref={styleMenuRef}>
               <button

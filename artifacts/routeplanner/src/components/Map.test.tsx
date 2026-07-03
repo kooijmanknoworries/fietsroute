@@ -33,6 +33,16 @@ const { constructorCalls, fitBoundsCalls, layoutCalls, addedLayers } = vi.hoiste
   addedLayers: [] as Array<Record<string, unknown>>,
 }));
 
+// The map fetches the (toggleable) LF-routes overlay through the generated
+// API client; stub it so no real query client or network is needed.
+vi.mock("@workspace/api-client-react", () => ({
+  useGetLfRoutes: () => ({ data: undefined }),
+  getGetLfRoutesQueryKey: (params?: { bbox: string }) => [
+    "lf-routes",
+    params?.bbox,
+  ],
+}));
+
 vi.mock("maplibre-gl", () => {
   class FakeMap {
     constructor(options: MapOptions) {
@@ -89,7 +99,21 @@ vi.mock("maplibre-gl", () => {
   }
   class NavigationControl {}
   class ScaleControl {}
-  return { default: { Map: FakeMap, NavigationControl, ScaleControl } };
+  class Popup {
+    setLngLat() {
+      return this;
+    }
+    setDOMContent() {
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    remove() {
+      return this;
+    }
+  }
+  return { default: { Map: FakeMap, NavigationControl, ScaleControl, Popup } };
 });
 
 import Map from "./Map";
@@ -114,7 +138,8 @@ const baseProps = {
 
 const BASE_LAYER_STORAGE_KEY = "fietsrouteplanner.baseLayer";
 
-const STREET_LAYER = "street-osm-layer";
+// The default street style is "voyager" (see map-view.ts getStreetStyle).
+const STREET_LAYER = "street-voyager-layer";
 
 function visibilityOf(style: MapOptions["style"], layerId: string) {
   return style?.layers?.find((l) => l.id === layerId)?.layout?.visibility;
@@ -330,8 +355,8 @@ describe("Map", () => {
     );
 
     // Open the style picker (only available while the street base is shown).
-    // The default look is OpenStreetMap ("osm"), so that is the button label.
-    fireEvent.click(screen.getByRole("button", { name: /OpenStreetMap/ }));
+    // The default look is Voyager, so that is the button label.
+    fireEvent.click(screen.getByRole("button", { name: /Voyager/ }));
 
     const menu = screen.getByRole("menu");
     const options = within(menu).getAllByRole("menuitemradio");
@@ -343,10 +368,10 @@ describe("Map", () => {
       "Donker",
       "OpenStreetMap",
     ]);
-    // OpenStreetMap is the default, so it starts checked.
+    // Voyager is the default, so it starts checked.
     expect(
       within(menu)
-        .getByRole("menuitemradio", { name: /OpenStreetMap/ })
+        .getByRole("menuitemradio", { name: /Voyager/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
 
@@ -356,6 +381,49 @@ describe("Map", () => {
     expect(localStorage.getItem("fietsrouteplanner.streetStyle")).toBe("dark");
     // Choosing a street look also switches the street base back on.
     expect(localStorage.getItem("fietsrouteplanner.baseLayer")).toBe("map");
+  });
+
+  it("LF-routes overlay is off by default and toggles visible when clicked", () => {
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
+
+    // The layer is registered hidden (toggle off by default).
+    const lfLayer = addedLayers.find((l) => l.id === "lf-routes-layer");
+    expect(lfLayer).toBeDefined();
+    expect((lfLayer?.layout as { visibility?: string })?.visibility).toBe("none");
+
+    // Toggling on shows the layer and persists the preference.
+    fireEvent.click(screen.getByRole("button", { name: /LF-routes/ }));
+    expect(lastVisibility("lf-routes-layer")).toBe("visible");
+    expect(localStorage.getItem("fietsrouteplanner.lfRoutes")).toBe("on");
+
+    // Toggling off hides it again.
+    fireEvent.click(screen.getByRole("button", { name: /LF-routes/ }));
+    expect(lastVisibility("lf-routes-layer")).toBe("none");
+    expect(localStorage.getItem("fietsrouteplanner.lfRoutes")).toBe("off");
+  });
+
+  it("restores a persisted LF-routes toggle on the next load", () => {
+    localStorage.setItem("fietsrouteplanner.lfRoutes", "on");
+
+    render(
+      <I18nProvider>
+        <Map {...baseProps} initialBounds={null} fitBounds={null} />
+      </I18nProvider>,
+    );
+
+    const lfLayer = addedLayers.find((l) => l.id === "lf-routes-layer");
+    expect((lfLayer?.layout as { visibility?: string })?.visibility).toBe(
+      "visible",
+    );
+    expect(
+      screen.getByRole("button", { name: /LF-routes/ }).getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
   });
 
   it("restores a previously saved street style on reload", () => {

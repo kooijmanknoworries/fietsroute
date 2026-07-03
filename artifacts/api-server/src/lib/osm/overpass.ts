@@ -26,13 +26,21 @@ export interface OverpassResult {
   ways: OverpassWay[];
 }
 
-interface OverpassElement {
+export interface OverpassElement {
   type: string;
   id: number;
   lat?: number;
   lon?: number;
   nodes?: number[];
   tags?: Record<string, string>;
+  members?: OverpassRelationMember[];
+}
+
+export interface OverpassRelationMember {
+  type: string;
+  ref: number;
+  role?: string;
+  geometry?: { lat: number; lon: number }[];
 }
 
 const OVERPASS_ENDPOINTS = [
@@ -153,7 +161,7 @@ out body;`;
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
-async function requestOverpass(query: string): Promise<OverpassElement[]> {
+export async function requestOverpass(query: string): Promise<OverpassElement[]> {
   let lastError: unknown;
   for (const endpoint of OVERPASS_ENDPOINTS) {
     const ctrl = new AbortController();
