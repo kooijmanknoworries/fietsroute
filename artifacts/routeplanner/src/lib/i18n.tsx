@@ -69,7 +69,6 @@ const en = {
   "ride.summary.avgSpeed": "Average speed",
   "ride.summary.newSegments": "New segments unlocked",
   "ride.summary.totalSegments": "Lifetime segments",
-  "ride.summary.signInHint": "Sign in to keep these segments in your lifetime history.",
   "ride.summary.done": "Done",
 
   "saved.title": "Saved Routes",
@@ -192,7 +191,6 @@ const nl: Record<TranslationKey, string> = {
   "ride.summary.avgSpeed": "Gemiddelde snelheid",
   "ride.summary.newSegments": "Nieuwe segmenten ontgrendeld",
   "ride.summary.totalSegments": "Totaal aantal segmenten",
-  "ride.summary.signInHint": "Log in om deze segmenten in je totaaloverzicht te bewaren.",
   "ride.summary.done": "Klaar",
   "route.nodesCount": "{count} knooppunten",
 

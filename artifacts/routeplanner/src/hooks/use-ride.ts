@@ -38,10 +38,8 @@ export interface RideSummary {
   avgSpeedKmh: number | null;
   /** Segments unlocked this session that weren't already in lifetime history. */
   newSegments: number;
-  /** Lifetime unique segments (history + this session). Only shown when signed in. */
+  /** Lifetime unique segments (history + this session). */
   totalSegments: number;
-  /** Whether the rider was signed in, so lifetime totals are meaningful. */
-  isSignedIn: boolean;
 }
 
 export interface RideState {
@@ -294,7 +292,6 @@ export function useRide({
       avgSpeedKmh,
       newSegments,
       totalSegments,
-      isSignedIn,
     });
 
     setIsRiding(false);

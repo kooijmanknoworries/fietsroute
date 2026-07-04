@@ -97,7 +97,6 @@ describe("useRide end-of-ride summary", () => {
 
     const summary = result.current.rideSummary;
     expect(summary).not.toBeNull();
-    expect(summary?.isSignedIn).toBe(false);
     expect(summary?.newSegments).toBe(2);
     expect(summary?.distanceMeters).toBeGreaterThan(0);
   });
@@ -116,7 +115,6 @@ describe("useRide end-of-ride summary", () => {
     act(() => result.current.stopRide());
 
     const summary = result.current.rideSummary;
-    expect(summary?.isSignedIn).toBe(true);
     // Only the second leg is newly unlocked; the first was already in history.
     expect(summary?.newSegments).toBe(1);
     // Lifetime total counts both legs, de-duplicated with history.

@@ -850,24 +850,17 @@ export default function Home() {
                   </span>
                 </div>
               </div>
-              {rideSummary.isSignedIn ? (
-                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
-                  <Lock className="h-5 w-5 shrink-0 text-primary" />
-                  <div className="flex flex-1 items-center justify-between">
-                    <span className="text-sm text-muted-foreground">
-                      {t("ride.summary.totalSegments")}
-                    </span>
-                    <span className="text-lg font-semibold">
-                      {rideSummary.totalSegments}
-                    </span>
-                  </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                <Lock className="h-5 w-5 shrink-0 text-primary" />
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {t("ride.summary.totalSegments")}
+                  </span>
+                  <span className="text-lg font-semibold">
+                    {rideSummary.totalSegments}
+                  </span>
                 </div>
-              ) : (
-                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                  <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-                  {t("ride.summary.signInHint")}
-                </p>
-              )}
+              </div>
             </div>
           )}
           <DialogFooter>
