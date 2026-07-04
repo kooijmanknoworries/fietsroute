@@ -151,6 +151,49 @@ export async function isDatasetReady(): Promise<boolean> {
   }
 }
 
+export interface DatasetStatus {
+  // True when the preloaded dataset is complete enough to serve the whole
+  // NL+BE region quickly. When false the server is likely falling back to
+  // slow live Overpass queries for some viewports.
+  ready: boolean;
+  // Number of numbered nodes currently in the local dataset.
+  nodeCount: number;
+  // Node count at/above which the dataset is treated as ready.
+  threshold: number;
+}
+
+let statusCache: { status: DatasetStatus; at: number } | null = null;
+
+// Report the dataset's readiness (node count vs the completeness threshold) so
+// the web app can show a "still loading" notice while the import is running or
+// after a DB reset. Cached briefly like the readiness probe.
+export async function getDatasetStatus(): Promise<DatasetStatus> {
+  const now = Date.now();
+  if (statusCache && now - statusCache.at < READY_CACHE_MS) {
+    return statusCache.status;
+  }
+  try {
+    const rows = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(networkNodesTable);
+    const nodeCount = Number(rows[0]?.count ?? 0);
+    const status: DatasetStatus = {
+      ready: nodeCount >= DATASET_INCOMPLETE_THRESHOLD,
+      nodeCount,
+      threshold: DATASET_INCOMPLETE_THRESHOLD,
+    };
+    statusCache = { status, at: now };
+    return status;
+  } catch (err) {
+    logger.warn({ err }, "Dataset status check failed");
+    return {
+      ready: false,
+      nodeCount: 0,
+      threshold: DATASET_INCOMPLETE_THRESHOLD,
+    };
+  }
+}
+
 // Serve a viewport from the local dataset. Returns truncated when the viewport
 // holds more nodes than the cap. The caller checks the area cap beforehand.
 export async function getNetworkFromDataset(bbox: Bbox): Promise<NetworkData> {

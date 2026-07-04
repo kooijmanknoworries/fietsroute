@@ -67,6 +67,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /network-status:
+    get:
+      operationId: getNetworkStatus
+      tags: [network]
+      summary: Readiness of the preloaded cycling network dataset
+      description: >
+        Reports whether the locally preloaded NL+BE cycling node network is
+        complete (node count vs the completeness threshold). When it is not
+        ready the server falls back to live OpenStreetMap queries, which can be
+        slow, so the web app can show a friendly "still loading" notice.
+      responses:
+        "200":
+          description: Dataset readiness
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NetworkStatus"
   /lf-routes:
     get:
       operationId: getLfRoutes
@@ -412,6 +429,24 @@ components:
         - nodes
         - segments
         - truncated
+    NetworkStatus:
+      type: object
+      properties:
+        ready:
+          type: boolean
+          description: >
+            True when the preloaded dataset is complete and served fast; false
+            when the server is falling back to slow live OpenStreetMap queries.
+        nodeCount:
+          type: number
+          description: Number of numbered nodes currently in the local dataset.
+        threshold:
+          type: number
+          description: Node count at/above which the dataset is considered ready.
+      required:
+        - ready
+        - nodeCount
+        - threshold
     LfRoute:
       type: object
       description: >

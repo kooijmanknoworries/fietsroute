@@ -21,6 +21,7 @@ export * from './municipalityResult';
 export * from './networkData';
 export * from './networkNode';
 export * from './networkSegment';
+export * from './networkStatus';
 export * from './region';
 export * from './routeLeg';
 export * from './routePlan';

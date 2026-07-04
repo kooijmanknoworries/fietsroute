@@ -41,6 +41,16 @@ export interface NetworkData {
   truncated: boolean;
 }
 
+export interface NetworkStatus {
+  /** True when the preloaded dataset is complete and served fast; false when the server is falling back to slow live OpenStreetMap queries.
+   */
+  ready: boolean;
+  /** Number of numbered nodes currently in the local dataset. */
+  nodeCount: number;
+  /** Node count at/above which the dataset is considered ready. */
+  threshold: number;
+}
+
 /**
  * A long-distance LF cycling route (OSM ncn route relation) with the parts of its geometry that intersect the requested bounding box.
 

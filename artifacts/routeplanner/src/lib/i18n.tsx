@@ -42,6 +42,8 @@ const en = {
   "network.zoomInTitle": "Zoom in",
   "network.zoomInDesc": "Zoom in closer to see all cycling nodes in this area.",
   "network.noNodes": "No nodes found in current view.",
+  "network.preparingTitle": "Map data is still loading",
+  "network.preparingDesc": "We're preparing the cycling network for your area. The map may load a little slower until it's ready — this usually only takes a moment.",
 
   "route.yourRoute": "Your Route",
   "route.undo": "Undo last node",
@@ -161,6 +163,8 @@ const nl: Record<TranslationKey, string> = {
   "network.zoomInTitle": "Zoom in",
   "network.zoomInDesc": "Zoom verder in om alle knooppunten in dit gebied te zien.",
   "network.noNodes": "Geen knooppunten in huidig beeld.",
+  "network.preparingTitle": "Kaartgegevens worden nog geladen",
+  "network.preparingDesc": "We bereiden het fietsknooppuntennetwerk voor jouw gebied voor. De kaart laadt mogelijk iets langzamer totdat alles klaar is — dit duurt meestal maar even.",
 
   "route.yourRoute": "Jouw route",
   "route.undo": "Laatste knooppunt ongedaan maken",

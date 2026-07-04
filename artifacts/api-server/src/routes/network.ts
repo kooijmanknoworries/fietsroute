@@ -1,6 +1,11 @@
 import { Router, type IRouter } from "express";
-import { GetNetworkQueryParams, GetNetworkResponse } from "@workspace/api-zod";
+import {
+  GetNetworkQueryParams,
+  GetNetworkResponse,
+  GetNetworkStatusResponse,
+} from "@workspace/api-zod";
 import { getNetworkData } from "../lib/osm/network";
+import { getDatasetStatus } from "../lib/osm/dataset";
 import type { Bbox } from "../lib/osm/overpass";
 
 const router: IRouter = Router();
@@ -45,6 +50,11 @@ router.get("/network", async (req, res): Promise<void> => {
     req.log.error({ err }, "Failed to fetch cycling network");
     res.status(502).json({ message: "Failed to fetch cycling network data" });
   }
+});
+
+router.get("/network-status", async (_req, res): Promise<void> => {
+  const status = await getDatasetStatus();
+  res.json(GetNetworkStatusResponse.parse(status));
 });
 
 export default router;

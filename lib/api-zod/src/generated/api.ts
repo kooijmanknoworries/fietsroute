@@ -42,6 +42,18 @@ export const GetNetworkResponse = zod.object({
 
 
 /**
+ * Reports whether the locally preloaded NL+BE cycling node network is complete (node count vs the completeness threshold). When it is not ready the server falls back to live OpenStreetMap queries, which can be slow, so the web app can show a friendly "still loading" notice.
+
+ * @summary Readiness of the preloaded cycling network dataset
+ */
+export const GetNetworkStatusResponse = zod.object({
+  "ready": zod.boolean().describe('True when the preloaded dataset is complete and served fast; false when the server is falling back to slow live OpenStreetMap queries.\n'),
+  "nodeCount": zod.number().describe('Number of numbered nodes currently in the local dataset.'),
+  "threshold": zod.number().describe('Node count at\/above which the dataset is considered ready.')
+})
+
+
+/**
  * Returns the long-distance cycling routes (Landelijke Fietsroutes, network=ncn route relations such as the LF Maasroute) that pass through the given bounding box, as line geometries with the route's name and ref. Data is sourced from OpenStreetMap and cached.
 
  * @summary Get long-distance LF cycling routes for a bounding box

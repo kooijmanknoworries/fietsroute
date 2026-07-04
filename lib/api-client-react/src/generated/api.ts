@@ -30,6 +30,7 @@ import type {
   LfRoutesData,
   MunicipalityResult,
   NetworkData,
+  NetworkStatus,
   Region,
   RoutePlan,
   RouteRequest,
@@ -203,6 +204,85 @@ export function useGetNetwork<TData = Awaited<ReturnType<typeof getNetwork>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetNetworkQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetNetworkStatusUrl = () => {
+
+
+
+
+  return `/api/network-status`
+}
+
+/**
+ * Reports whether the locally preloaded NL+BE cycling node network is complete (node count vs the completeness threshold). When it is not ready the server falls back to live OpenStreetMap queries, which can be slow, so the web app can show a friendly "still loading" notice.
+
+ * @summary Readiness of the preloaded cycling network dataset
+ */
+export const getNetworkStatus = async ( options?: RequestInit): Promise<NetworkStatus> => {
+
+  return customFetch<NetworkStatus>(getGetNetworkStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetNetworkStatusQueryKey = () => {
+    return [
+    `/api/network-status`
+    ] as const;
+    }
+
+
+export const getGetNetworkStatusQueryOptions = <TData = Awaited<ReturnType<typeof getNetworkStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNetworkStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetNetworkStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getNetworkStatus>>> = ({ signal }) => getNetworkStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getNetworkStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetNetworkStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getNetworkStatus>>>
+export type GetNetworkStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Readiness of the preloaded cycling network dataset
+ */
+
+export function useGetNetworkStatus<TData = Awaited<ReturnType<typeof getNetworkStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getNetworkStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetNetworkStatusQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

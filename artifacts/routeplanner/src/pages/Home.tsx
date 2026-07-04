@@ -37,6 +37,10 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useMunicipality } from "@/hooks/use-municipality";
+import {
+  useGetNetworkStatus,
+  getGetNetworkStatusQueryKey,
+} from "@workspace/api-client-react";
 import type { MunicipalityResult } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -100,6 +104,18 @@ export default function Home() {
     dismiss: dismissClaim,
     isClaiming,
   } = useClaimAnonymousRoutes();
+
+  // Dataset readiness: when the preloaded network isn't complete yet, the API
+  // falls back to slow live queries. Poll periodically while it's not ready so
+  // the notice disappears automatically once the import finishes.
+  const { data: networkStatus } = useGetNetworkStatus({
+    query: {
+      queryKey: getGetNetworkStatusQueryKey(),
+      refetchInterval: (query) =>
+        query.state.data?.ready === false ? 15000 : false,
+    },
+  });
+  const isDatasetPreparing = networkStatus?.ready === false;
 
   const { toast } = useToast();
   const { lang, setLang, t } = useI18n();
@@ -439,6 +455,15 @@ export default function Home() {
 
           {/* Network Status */}
           <div className="space-y-2">
+            {isDatasetPreparing && (
+              <Alert variant="default" className="bg-secondary text-secondary-foreground border-none">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <AlertTitle>{t("network.preparingTitle")}</AlertTitle>
+                <AlertDescription>
+                  {t("network.preparingDesc")}
+                </AlertDescription>
+              </Alert>
+            )}
             {isNetworkLoading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> {t("network.loading")}
