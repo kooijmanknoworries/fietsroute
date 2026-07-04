@@ -13,3 +13,6 @@
 - [vitest setup](api-server-vitest.md) — committed tests: api-server (vitest+supertest, mock `@clerk/express` getAuth, set `req.log`, clean up shared DB); routeplanner (vitest+jsdom, mock `@clerk/react`+api-client, test hooks not Home); validation `pnpm -r run test`.
 - [Artifact workflow names](workflow-names.md) — restart dev servers via `restartWorkflow` with names like `artifacts/api-server: API Server`; plain titles fail. Use `listWorkflows()` first.
 - [LF-routes overlay caching](lf-routes-overlay.md) — ncn relations fetched via `out geom(bbox)` and cached in `overpass_cache` under `lf:`-prefixed keys; new query kinds sharing that table need their own prefix.
+- [Dataset routing intermediate nodes](dataset-routing-intermediate-nodes.md) — routing from the preloaded dataset must rebuild un-numbered way nodes from segment node_ids+coordinates or the graph is disconnected.
+- [Overpass endpoint reliability](overpass-endpoints-reliability.md) — mail.ru mirror works, .fr is 403 whitelist-only; client timeout must exceed query `[timeout:N]`; serialize all requests in one slot.
+- [Resumable network import](resumable-network-import.md) — chunks marked `import-chunk:` in `overpass_cache`; prune only on clean runs; 10-min loop self-heals incomplete datasets.

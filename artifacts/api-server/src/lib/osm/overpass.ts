@@ -46,10 +46,14 @@ export interface OverpassRelationMember {
 // Note: overpass.osm.ch is deliberately excluded — it only serves Switzerland
 // and returns a valid-but-empty 200 for NL/BE bboxes, which poisoned the cache
 // with empty results when the main endpoints were down.
+// overpass.openstreetmap.fr is also excluded — it only serves white-listed
+// clients and always returns 403 for us, wasting a fallback attempt.
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
+  // Full-planet mirror maintained by VK Maps; fast and reliable for the heavy
+  // chunk queries when the main instance is overloaded (429/504).
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.openstreetmap.fr/api/interpreter",
 ];
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -175,43 +179,88 @@ function buildQuery(b: Bbox): string {
 out body;`;
 }
 
-const REQUEST_TIMEOUT_MS = 15_000;
+// Must exceed the [timeout:30] in the Overpass query itself, otherwise the
+// client aborts slow-but-successful responses that the server would still
+// deliver within its own budget.
+const REQUEST_TIMEOUT_MS = 35_000;
 
-export async function requestOverpass(query: string): Promise<OverpassElement[]> {
+// Overpass servers allow very few concurrent requests per IP. The importer,
+// the tile warmer, and live user requests can otherwise all fire at once and
+// trip the rate limiter (429), so every request is funneled through a single
+// in-flight slot.
+let overpassSlot: Promise<void> = Promise.resolve();
+
+function withOverpassSlot<T>(fn: () => Promise<T>): Promise<T> {
+  const run = overpassSlot.then(fn);
+  overpassSlot = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+// A rate-limited or overloaded primary endpoint usually recovers within
+// seconds; retry the whole endpoint list a couple of times before giving up.
+const REQUEST_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 5_000;
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestOverpassOnce(
+  query: string,
+): Promise<OverpassElement[]> {
   let lastError: unknown;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-          "User-Agent": "Fietsrouteplanner/1.0 (cycling node route planner)",
-        },
-        body: "data=" + encodeURIComponent(query),
-        signal: ctrl.signal,
-      });
-      clearTimeout(timer);
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        lastError = new Error(
-          `Overpass ${endpoint} returned ${res.status}: ${text.slice(0, 200)}`,
+  for (let attempt = 1; attempt <= REQUEST_ATTEMPTS; attempt++) {
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+            "User-Agent": "Fietsrouteplanner/1.0 (cycling node route planner)",
+          },
+          body: "data=" + encodeURIComponent(query),
+          signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          lastError = new Error(
+            `Overpass ${endpoint} returned ${res.status}: ${text.slice(0, 200)}`,
+          );
+          logger.warn(
+            { endpoint, status: res.status, attempt },
+            "Overpass endpoint returned error status, trying next",
+          );
+          continue;
+        }
+        const json = (await res.json()) as { elements?: OverpassElement[] };
+        return json.elements ?? [];
+      } catch (err) {
+        clearTimeout(timer);
+        lastError = err;
+        logger.warn(
+          { err, endpoint, attempt },
+          "Overpass endpoint failed, trying next",
         );
-        continue;
       }
-      const json = (await res.json()) as { elements?: OverpassElement[] };
-      return json.elements ?? [];
-    } catch (err) {
-      clearTimeout(timer);
-      lastError = err;
-      logger.warn({ err, endpoint }, "Overpass endpoint failed, trying next");
+    }
+    if (attempt < REQUEST_ATTEMPTS) {
+      await sleepMs(RETRY_BACKOFF_MS * attempt);
     }
   }
   throw lastError instanceof Error
     ? lastError
     : new Error("All Overpass endpoints failed");
+}
+
+export function requestOverpass(query: string): Promise<OverpassElement[]> {
+  return withOverpassSlot(() => requestOverpassOnce(query));
 }
 
 function parseElements(elements: OverpassElement[]): OverpassResult {

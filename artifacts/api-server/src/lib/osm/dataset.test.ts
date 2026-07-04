@@ -7,7 +7,11 @@ import {
   overpassCacheTable,
   pool,
 } from "@workspace/db";
-import { getNetworkFromDataset, isDatasetReady } from "./dataset";
+import {
+  getNetworkForRoute,
+  getNetworkFromDataset,
+  isDatasetReady,
+} from "./dataset";
 import { getNetworkData } from "./network";
 import type { Bbox } from "./overpass";
 
@@ -18,8 +22,15 @@ const OUT_NODE_ID = "900000002";
 const IN_SEG_ID = "900000101";
 const OUT_SEG_ID = "900000102";
 
-const NODE_IDS = [IN_NODE_ID, OUT_NODE_ID];
-const SEG_IDS = [IN_SEG_ID, OUT_SEG_ID];
+// Routing fixture: two numbered knooppunten connected by a segment that also
+// passes through an intermediate (un-numbered) way node.
+const ROUTE_NODE_A = "900000003";
+const ROUTE_NODE_B = "900000004";
+const ROUTE_MID_ID = 900000005;
+const ROUTE_SEG_ID = "900000103";
+
+const NODE_IDS = [IN_NODE_ID, OUT_NODE_ID, ROUTE_NODE_A, ROUTE_NODE_B];
+const SEG_IDS = [IN_SEG_ID, OUT_SEG_ID, ROUTE_SEG_ID];
 
 const VIEW: Bbox = { minLon: 1.0, minLat: 40.0, maxLon: 1.2, maxLat: 40.2 };
 
@@ -35,6 +46,8 @@ beforeAll(async () => {
   await db.insert(networkNodesTable).values([
     { id: IN_NODE_ID, ref: "11", lat: 40.1, lon: 1.1 },
     { id: OUT_NODE_ID, ref: "12", lat: 41.5, lon: 1.1 },
+    { id: ROUTE_NODE_A, ref: "21", lat: 40.3, lon: 1.3 },
+    { id: ROUTE_NODE_B, ref: "22", lat: 40.3, lon: 1.34 },
   ]);
   await db.insert(networkSegmentsTable).values([
     {
@@ -59,6 +72,19 @@ beforeAll(async () => {
       minLon: 1.05,
       maxLon: 1.15,
     },
+    {
+      id: ROUTE_SEG_ID,
+      coordinates: [
+        [1.3, 40.3],
+        [1.32, 40.3],
+        [1.34, 40.3],
+      ],
+      nodeIds: [Number(ROUTE_NODE_A), ROUTE_MID_ID, Number(ROUTE_NODE_B)],
+      minLat: 40.3,
+      maxLat: 40.3,
+      minLon: 1.3,
+      maxLon: 1.34,
+    },
   ]);
 });
 
@@ -81,6 +107,38 @@ describe("network dataset", () => {
     const segIds = data.segments.map((s) => s.id);
     expect(segIds).toContain(IN_SEG_ID);
     expect(segIds).not.toContain(OUT_SEG_ID);
+  });
+
+  it("reconstructs intermediate way nodes for routing from segment geometry", async () => {
+    const prev = process.env.DATASET_MIN_NODE_COUNT;
+    process.env.DATASET_MIN_NODE_COUNT = "0";
+    try {
+      const data = await getNetworkForRoute({
+        minLon: 1.25,
+        minLat: 40.25,
+        maxLon: 1.4,
+        maxLat: 40.35,
+      });
+      const way = data.ways.find((w) => w.id === Number(ROUTE_SEG_ID));
+      expect(way).toBeDefined();
+      expect(way?.nodes).toEqual([
+        Number(ROUTE_NODE_A),
+        ROUTE_MID_ID,
+        Number(ROUTE_NODE_B),
+      ]);
+      // The intermediate node is not stored as a numbered knooppunt, so it
+      // must be rebuilt from the segment's coordinates for graph edges to form.
+      const mid = data.nodes.get(ROUTE_MID_ID);
+      expect(mid).toBeDefined();
+      expect(mid?.lon).toBeCloseTo(1.32);
+      expect(mid?.lat).toBeCloseTo(40.3);
+      expect(mid?.rcnRef).toBeUndefined();
+      // Numbered endpoints keep their refs.
+      expect(data.nodes.get(Number(ROUTE_NODE_A))?.rcnRef).toBe("21");
+    } finally {
+      if (prev === undefined) delete process.env.DATASET_MIN_NODE_COUNT;
+      else process.env.DATASET_MIN_NODE_COUNT = prev;
+    }
   });
 
   it("serves from the dataset without hitting live Overpass", async () => {
