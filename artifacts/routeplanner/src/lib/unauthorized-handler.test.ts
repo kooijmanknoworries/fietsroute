@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getRegions, setUnauthorizedHandler } from "@workspace/api-client-react";
+import {
+  createUnauthorizedHandler,
+  getRegions,
+  setUnauthorizedHandler,
+} from "@workspace/api-client-react";
+
+// Let the handler's fire-and-forget async verification settle.
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -70,5 +77,89 @@ describe("central 401 handler", () => {
     });
 
     expect(await statusOfRejection(getRegions())).toBe(401);
+  });
+});
+
+describe("createUnauthorizedHandler (session verification)", () => {
+  it("does not prompt when Clerk still mints a fresh token (transient 401)", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi.fn().mockResolvedValue("fresh-token");
+
+    const handler = createUnauthorizedHandler({ getToken, onExpired });
+    handler();
+    await flush();
+
+    expect(getToken).toHaveBeenCalledWith({ skipCache: true });
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it("prompts when Clerk cannot mint a token (session gone)", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi.fn().mockResolvedValue(null);
+
+    const handler = createUnauthorizedHandler({ getToken, onExpired });
+    handler();
+    await flush();
+
+    expect(onExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("prompts when the token refresh throws", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi.fn().mockRejectedValue(new Error("network"));
+
+    const handler = createUnauthorizedHandler({ getToken, onExpired });
+    handler();
+    await flush();
+
+    expect(onExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays silent while not ready (e.g. Clerk still loading)", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi.fn().mockResolvedValue(null);
+
+    const handler = createUnauthorizedHandler({
+      getToken,
+      onExpired,
+      isReady: () => false,
+    });
+    handler();
+    await flush();
+
+    expect(getToken).not.toHaveBeenCalled();
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it("collapses a burst of 401s into a single prompt, then prompts again after the debounce", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi.fn().mockResolvedValue(null);
+    let clock = 10_000;
+
+    const handler = createUnauthorizedHandler({
+      getToken,
+      onExpired,
+      now: () => clock,
+      debounceMs: 3000,
+    });
+
+    // Burst: each verification runs sequentially once the previous settles.
+    handler();
+    await flush();
+    handler();
+    await flush();
+    expect(onExpired).toHaveBeenCalledTimes(1);
+
+    // Still inside the debounce window — no new prompt.
+    clock = 12_000;
+    handler();
+    await flush();
+    expect(onExpired).toHaveBeenCalledTimes(1);
+
+    // Past the window — a fresh expiry prompts again.
+    clock = 13_500;
+    handler();
+    await flush();
+    expect(onExpired).toHaveBeenCalledTimes(2);
   });
 });

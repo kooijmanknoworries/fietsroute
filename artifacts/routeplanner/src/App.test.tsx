@@ -24,6 +24,10 @@ vi.mock("@clerk/react", () => ({
   Show: ({ when, children }: { when: string; children: ReactNode }) =>
     when === authState.status ? <>{children}</> : null,
   useClerk: () => ({ addListener: () => () => {} }),
+  useAuth: () => ({
+    isLoaded: true,
+    getToken: async () => (authState.status === "signed-in" ? "token" : null),
+  }),
 }));
 
 vi.mock("@clerk/react/internal", () => ({
