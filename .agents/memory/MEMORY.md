@@ -20,3 +20,4 @@
 - [Resumable network import](resumable-network-import.md) — chunks marked `import-chunk:` in `overpass_cache`; prune only on clean runs; 10-min loop self-heals incomplete datasets.
 - [Network dataset freshness](network-dataset-freshness.md) — rolling refresh re-imports oldest chunk on a STALE_MS/chunk cadence; `GET /api/network/status` shows age/coverage; 0 markers ≠ empty dataset.
 - [Ride tracking](ride-tracking.md) — MapLibre icons must be raw ImageData not canvas (jsdom has no 2D ctx); segment id = sorted OSM node-id pair; history persist gated to signed-in.
+- [Mobile map web shim](mobile-map-web-shim.md) — mobile map on web = Leaflet DOM-tile shim for react-native-maps (no WebGL); runTest can't reach it, verify with screenshot app_preview.
