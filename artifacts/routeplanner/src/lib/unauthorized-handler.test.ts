@@ -104,15 +104,59 @@ describe("createUnauthorizedHandler (session verification)", () => {
     expect(onExpired).toHaveBeenCalledTimes(1);
   });
 
-  it("prompts when the token refresh throws", async () => {
+  it("does NOT prompt when the token refresh keeps throwing (transient network/Clerk blip)", async () => {
     const onExpired = vi.fn();
     const getToken = vi.fn().mockRejectedValue(new Error("network"));
 
-    const handler = createUnauthorizedHandler({ getToken, onExpired });
+    const handler = createUnauthorizedHandler({
+      getToken,
+      onExpired,
+      sleep: () => Promise.resolve(),
+    });
     handler();
     await flush();
 
+    // First attempt plus the default two retries = three tries, then silence.
+    expect(getToken).toHaveBeenCalledTimes(3);
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
+  it("prompts when a transient throw resolves to a definitive 'no session'", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce(null);
+
+    const handler = createUnauthorizedHandler({
+      getToken,
+      onExpired,
+      sleep: () => Promise.resolve(),
+    });
+    handler();
+    await flush();
+
+    expect(getToken).toHaveBeenCalledTimes(2);
     expect(onExpired).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays silent when a transient throw resolves to a still-valid session", async () => {
+    const onExpired = vi.fn();
+    const getToken = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network"))
+      .mockResolvedValueOnce("fresh-token");
+
+    const handler = createUnauthorizedHandler({
+      getToken,
+      onExpired,
+      sleep: () => Promise.resolve(),
+    });
+    handler();
+    await flush();
+
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(onExpired).not.toHaveBeenCalled();
   });
 
   it("stays silent while not ready (e.g. Clerk still loading)", async () => {

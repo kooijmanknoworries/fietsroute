@@ -25,6 +25,13 @@ normal use even though they were never logged out — the handler fired on every
 **How to apply:** Keep the raw 401 signal (customFetch) separate from the
 decision to prompt — put session verification in the app-side handler, not in
 customFetch. Reuse the shared verifier in api-client-react rather than
-re-checking 401s per call site. Treating a thrown `getToken` as "expired" is
-deliberate fail-closed; if transient network failures cause false prompts,
-distinguish retryable errors before prompting.
+re-checking 401s per call site.
+
+**Three-way outcome (not two):** `getToken` *returning* null = Clerk reached its
+servers and confirmed no session → prompt. `getToken` *throwing* = Clerk was
+unreachable (network blip) → NOT proof of logout. The verifier retries a thrown
+call briefly (`maxRefreshRetries` default 2, `retryBackoffMs` default 500ms,
+injectable `sleep` for tests) and, if every attempt throws, stays SILENT — the
+next 401 re-verifies once the network recovers. Only a definitive null/empty
+token return prompts. Both web and mobile share this via the default config, so
+behavior stays consistent.

@@ -8,10 +8,17 @@
 // transient 401s are common and must NOT surface a scary re-auth prompt.
 //
 // So before prompting, this handler asks Clerk for a *fresh* token
-// (`getToken({ skipCache: true })`). If Clerk can still mint one, the session
-// is alive and the 401 was a transient blip — stay silent. Only when Clerk
-// cannot produce a token (session genuinely expired or revoked) do we fire the
-// prompt, debounced so one expiry never produces a burst of prompts.
+// (`getToken({ skipCache: true })`). There are three possible outcomes:
+//   1. A token comes back  → the session is alive, the 401 was a transient
+//      blip → stay silent.
+//   2. `null` comes back   → Clerk *reached its servers* and confirmed there is
+//      no session → prompt (session genuinely expired/revoked).
+//   3. The call *throws*   → we couldn't reach Clerk at all (network hiccup,
+//      Clerk briefly unreachable). This is NOT proof of a logout, so we retry a
+//      couple of times with a short backoff; if it keeps failing we stay silent
+//      rather than firing a false "je sessie is verlopen" prompt on a flaky
+//      connection. The next 401 will re-verify once the network recovers.
+// Prompts are debounced so one expiry never produces a burst of prompts.
 
 export type SkipCacheTokenGetter = (options?: {
   skipCache?: boolean;
@@ -38,12 +45,28 @@ export interface UnauthorizedHandlerDeps {
   now?: () => number;
   /** Minimum gap between prompts. Defaults to 3s. */
   debounceMs?: number;
+  /**
+   * How many extra attempts to make when `getToken` *throws* (i.e. Clerk is
+   * unreachable). The first call plus this many retries. Defaults to 2. When
+   * every attempt throws, the failure is treated as a transient network blip
+   * and no prompt is shown.
+   */
+  maxRefreshRetries?: number;
+  /**
+   * Base backoff between retries; attempt N waits `retryBackoffMs * N`.
+   * Defaults to 500ms.
+   */
+  retryBackoffMs?: number;
+  /** Injectable sleep, for tests. */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /**
  * Build a 401 handler (suitable for `setUnauthorizedHandler`) that verifies the
  * session is really gone — via a forced Clerk token refresh — before calling
- * `onExpired`. Transient 401s on a still-valid session are swallowed.
+ * `onExpired`. Transient 401s on a still-valid session are swallowed, and so
+ * are refresh failures caused by an unreachable network/Clerk (retried briefly,
+ * then ignored) so a flaky connection never produces a false prompt.
  *
  * The returned handler is synchronous (fire-and-forget): it kicks off the async
  * verification and returns immediately, so it never blocks the failing request.
@@ -56,6 +79,9 @@ export function createUnauthorizedHandler(deps: UnauthorizedHandlerDeps): () => 
     isReady,
     now = () => Date.now(),
     debounceMs = 3000,
+    maxRefreshRetries = 2,
+    retryBackoffMs = 500,
+    sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
   } = deps;
 
   let lastPromptedAt = 0;
@@ -68,17 +94,26 @@ export function createUnauthorizedHandler(deps: UnauthorizedHandlerDeps): () => 
     verifying = true;
     void (async () => {
       try {
-        let sessionStillValid = false;
-        try {
-          sessionStillValid = Boolean(await getToken({ skipCache: true }));
-        } catch {
-          // A failed refresh means we can't confirm a live session — treat it
-          // as expired so a genuine loss still prompts.
-          sessionStillValid = false;
+        // `undefined` = we never got a definitive answer from Clerk (every
+        // attempt threw). `true`/`false` = Clerk responded.
+        let sessionGone: boolean | undefined;
+
+        for (let attempt = 0; attempt <= maxRefreshRetries; attempt++) {
+          try {
+            sessionGone = !(await getToken({ skipCache: true }));
+            break; // Clerk answered — the decision is definitive.
+          } catch {
+            // Couldn't reach Clerk. Retry after a short backoff; on the last
+            // attempt leave `sessionGone` undefined so we stay silent below.
+            if (attempt < maxRefreshRetries) {
+              await sleep(retryBackoffMs * (attempt + 1));
+            }
+          }
         }
 
-        // Transient blip: Clerk refreshed the token fine, session is alive.
-        if (sessionStillValid) return;
+        // Either the session is still alive (token minted) or we could not
+        // confirm it was gone (network/Clerk unreachable) — stay silent.
+        if (sessionGone !== true) return;
 
         const t = now();
         if (t - lastPromptedAt < debounceMs) return;
