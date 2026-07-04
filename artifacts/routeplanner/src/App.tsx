@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   Switch,
   Route,
+  Redirect,
   useLocation,
   Router as WouterRouter,
 } from "wouter";
@@ -13,6 +14,7 @@ import {
   ClerkProvider,
   SignIn,
   SignUp,
+  Show,
   useClerk,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
@@ -141,10 +143,26 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+// Gate the planner behind an authenticated Clerk session. Signed-out visitors
+// are redirected to the sign-in screen (sign-up remains reachable from there);
+// the planner only renders once signed in.
+function HomeGate() {
+  return (
+    <>
+      <Show when="signed-in">
+        <Home />
+      </Show>
+      <Show when="signed-out">
+        <Redirect to="/sign-in" />
+      </Show>
+    </>
+  );
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={HomeGate} />
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
       <Route component={NotFound} />

@@ -10,7 +10,8 @@ import {
 import MapView, { Marker, Polyline, UrlTile, Region, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter, type Href } from "expo-router";
+import { useRouter, Redirect, type Href } from "expo-router";
+import { useAuth } from "@clerk/expo";
 import { useQuery } from "@tanstack/react-query";
 import { getNetwork, MunicipalityResult } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
@@ -53,7 +54,19 @@ function zoomLevelFromDelta(delta: number): number {
   return Math.round(Math.log(360 / delta) / Math.log(2));
 }
 
+// Gate the map/planning screen (and thus GPS ride tracking) behind an
+// authenticated Clerk session. Signed-out users are redirected to the sign-in
+// screen and only reach the planner once signed in. ClerkLoaded in the root
+// layout guarantees Clerk is loaded by the time this renders, but the isLoaded
+// guard stays as a safety net.
 export default function MapScreen() {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return null;
+  if (!isSignedIn) return <Redirect href={"/(auth)/sign-in" as Href} />;
+  return <MapScreenInner />;
+}
+
+function MapScreenInner() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();

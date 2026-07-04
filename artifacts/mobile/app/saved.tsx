@@ -104,6 +104,10 @@ export default function SavedRoutesScreen() {
               await queryClient.invalidateQueries({
                 queryKey: getListSavedRoutesQueryKey(),
               });
+              // Planning/GPS are gated behind auth, so send the signed-out user
+              // straight to the sign-in screen instead of leaving them on this
+              // modal over a now-inaccessible planner.
+              router.replace("/(auth)/sign-in" as Href);
             } catch {
               Alert.alert("Fout", "Afmelden is mislukt.");
             }
@@ -111,7 +115,7 @@ export default function SavedRoutesScreen() {
         },
       ]
     );
-  }, [signOut, queryClient]);
+  }, [signOut, queryClient, router]);
 
   const openServerRoute = useCallback(
     async (id: string) => {
