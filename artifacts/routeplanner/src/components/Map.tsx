@@ -380,6 +380,12 @@ export default function Map({
               zoom: UTRECHT.zoom,
             }),
       });
+      if (import.meta.env.DEV) {
+        // Dev-only test hook: lets browser-automation checks project node
+        // coordinates to screen pixels for real-canvas click testing.
+        (window as unknown as { __fietsMap?: maplibregl.Map }).__fietsMap =
+          map.current;
+      }
     } catch {
       setMapError(true);
       // The map canvas needs WebGL, but the rest of the planner (the
