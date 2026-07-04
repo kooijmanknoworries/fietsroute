@@ -17,6 +17,7 @@ import { useColors } from "@/hooks/useColors";
 import { useRoutePlanner, NetworkNode } from "@/context/RoutePlannerContext";
 import { useRideContext } from "@/context/RideContext";
 import RoutePanel from "@/components/RoutePanel";
+import RideOverlay from "@/components/RideOverlay";
 import RegionPicker from "@/components/RegionPicker";
 import RideSummaryModal from "@/components/RideSummaryModal";
 
@@ -57,7 +58,7 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { selectedNodes, routePlan, isPlanning, addNode } = useRoutePlanner();
-  const { ridePosition, rideSummary, dismissRideSummary } = useRideContext();
+  const { isRiding, ridePosition, rideSummary, dismissRideSummary } = useRideContext();
   const mapRef = useRef<MapView>(null);
 
   const [mapRegion, setMapRegion] = useState<Region>(INITIAL_REGION);
@@ -81,9 +82,12 @@ export default function MapScreen() {
 
   const handleNodePress = useCallback(
     (node: NetworkNode) => {
+      // Ignore planning taps while riding so an accidental marker tap can't
+      // mutate the route and abort the ride.
+      if (isRiding) return;
       addNode(node);
     },
-    [addNode]
+    [addNode, isRiding]
   );
 
   const handleSelectRegion = useCallback((region: Region2) => {
@@ -141,7 +145,7 @@ export default function MapScreen() {
           shouldReplaceMapContent={Platform.OS !== "web"}
         />
 
-        {showNodes &&
+        {showNodes && !isRiding &&
           networkData?.nodes.map((node) => {
             const isSelected = selectedNodeIds.has(node.id);
             return (
@@ -220,34 +224,38 @@ export default function MapScreen() {
         )}
       </MapView>
 
-      <RegionPicker
-        onSelectRegion={handleSelectRegion}
-        onSelectMunicipality={handleSelectMunicipality}
-      />
+      {!isRiding && (
+        <RegionPicker
+          onSelectRegion={handleSelectRegion}
+          onSelectMunicipality={handleSelectMunicipality}
+        />
+      )}
 
-      <TouchableOpacity
-        onPress={() => router.push("/saved" as Href)}
-        style={[
-          styles.savedBtn,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            top: topPad + 12,
-            right: 16,
-          },
-        ]}
-        testID="open-saved-routes"
-      >
-        <Ionicons name="bookmark-outline" size={20} color={colors.primary} />
-      </TouchableOpacity>
+      {!isRiding && (
+        <TouchableOpacity
+          onPress={() => router.push("/saved" as Href)}
+          style={[
+            styles.savedBtn,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              top: topPad + 12,
+              right: 16,
+            },
+          ]}
+          testID="open-saved-routes"
+        >
+          <Ionicons name="bookmark-outline" size={20} color={colors.primary} />
+        </TouchableOpacity>
+      )}
 
-      {networkLoading && (
+      {networkLoading && !isRiding && (
         <View style={[styles.loadingIndicator, { top: topPad + 76, right: 16 }]}>
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
       )}
 
-      {!showNodes && (
+      {!showNodes && !isRiding && (
         <View
           style={[
             styles.zoomHint,
@@ -280,6 +288,8 @@ export default function MapScreen() {
       )}
 
       <RoutePanel />
+
+      <RideOverlay />
 
       <RideSummaryModal summary={rideSummary} onClose={dismissRideSummary} />
     </View>
