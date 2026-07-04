@@ -10,6 +10,7 @@ import {
 import MapView, { Marker, Polyline, UrlTile, Region, PROVIDER_DEFAULT } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter, type Href } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getNetwork, MunicipalityResult } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
@@ -52,6 +53,7 @@ function zoomLevelFromDelta(delta: number): number {
 export default function MapScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { selectedNodes, routePlan, isPlanning, addNode } = useRoutePlanner();
   const mapRef = useRef<MapView>(null);
 
@@ -207,6 +209,22 @@ export default function MapScreen() {
         onSelectMunicipality={handleSelectMunicipality}
       />
 
+      <TouchableOpacity
+        onPress={() => router.push("/saved" as Href)}
+        style={[
+          styles.savedBtn,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            top: topPad + 12,
+            right: 16,
+          },
+        ]}
+        testID="open-saved-routes"
+      >
+        <Ionicons name="bookmark-outline" size={20} color={colors.primary} />
+      </TouchableOpacity>
+
       {networkLoading && (
         <View style={[styles.loadingIndicator, { top: topPad + 76, right: 16 }]}>
           <ActivityIndicator size="small" color={colors.primary} />
@@ -288,6 +306,20 @@ const styles = StyleSheet.create({
   selectedMarkerText: {
     fontSize: 13,
     color: "#ffffff",
+  },
+  savedBtn: {
+    position: "absolute",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   loadingIndicator: {
     position: "absolute",

@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,8 @@ import Animated, {
   withSpring,
 } from "react-native-reanimated";
 import { useColors } from "@/hooks/useColors";
-import { useRoutePlanner, NetworkNode } from "@/context/RoutePlannerContext";
+import { useRoutePlanner } from "@/context/RoutePlannerContext";
+import SaveRouteModal from "@/components/SaveRouteModal";
 
 function formatDistance(meters: number): string {
   if (meters >= 1000) {
@@ -30,6 +31,10 @@ export default function RoutePanel() {
   const insets = useSafeAreaInsets();
   const { selectedNodes, routePlan, isPlanning, planError, clearRoute, undoLastNode, removeNode } =
     useRoutePlanner();
+
+  const [saveVisible, setSaveVisible] = useState(false);
+
+  const canSave = selectedNodes.length >= 2 && !!routePlan;
 
   const translateY = useSharedValue(200);
 
@@ -87,6 +92,16 @@ export default function RoutePanel() {
           )}
         </View>
         <View style={styles.headerActions}>
+          {canSave && (
+            <TouchableOpacity
+              onPress={() => setSaveVisible(true)}
+              style={[styles.saveBtn, { backgroundColor: colors.primary }]}
+              testID="save-route"
+            >
+              <Ionicons name="bookmark-outline" size={16} color="#ffffff" />
+              <Text style={[styles.saveBtnText, { fontFamily: "Inter_600SemiBold" }]}>Opslaan</Text>
+            </TouchableOpacity>
+          )}
           {selectedNodes.length > 1 && (
             <TouchableOpacity
               onPress={undoLastNode}
@@ -159,6 +174,8 @@ export default function RoutePanel() {
           </Text>
         </View>
       )}
+
+      <SaveRouteModal visible={saveVisible} onClose={() => setSaveVisible(false)} />
     </Animated.View>
   );
 }
@@ -211,6 +228,18 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+  },
+  saveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+  },
+  saveBtnText: {
+    color: "#ffffff",
+    fontSize: 14,
   },
   distanceBadge: {
     flexDirection: "row",

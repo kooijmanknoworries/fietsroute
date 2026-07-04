@@ -30,6 +30,7 @@ interface RoutePlannerState {
   removeNode: (nodeId: string) => void;
   clearRoute: () => void;
   undoLastNode: () => void;
+  loadPlan: (nodes: NetworkNode[], plan: RoutePlan) => void;
 }
 
 const RoutePlannerContext = createContext<RoutePlannerState | null>(null);
@@ -128,6 +129,17 @@ export function RoutePlannerProvider({ children }: { children: React.ReactNode }
     setIsPlanning(false);
   }, []);
 
+  // Restore a previously saved route: adopt its nodes and precomputed plan
+  // without re-planning. Bumps the generation so any in-flight request from the
+  // prior editing session is discarded.
+  const loadPlan = useCallback((nodes: NetworkNode[], plan: RoutePlan) => {
+    generationRef.current += 1;
+    setSelectedNodes(nodes);
+    setRoutePlan(plan);
+    setPlanError(null);
+    setIsPlanning(false);
+  }, []);
+
   return (
     <RoutePlannerContext.Provider
       value={{
@@ -139,6 +151,7 @@ export function RoutePlannerProvider({ children }: { children: React.ReactNode }
         removeNode,
         clearRoute,
         undoLastNode,
+        loadPlan,
       }}
     >
       {children}
