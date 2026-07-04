@@ -599,7 +599,7 @@ export default function Home() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{route.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {formatDistance(route.distanceMeters)} · {t("route.nodesCount", { count: route.nodeRefs.length })}
+                          {formatDistance(route.distanceMeters)} · {t("route.nodesCount", { count: route.nodeRefs.length })} · {new Date(route.createdAt).toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </div>
                       </div>
                       <Button
