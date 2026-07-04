@@ -26,6 +26,17 @@ export interface LockPoint {
   lat: number;
 }
 
+export interface RideSummary {
+  /** Distance ridden during this session, in metres. */
+  distanceMeters: number;
+  /** Segments unlocked this session that weren't already in lifetime history. */
+  newSegments: number;
+  /** Lifetime unique segments (history + this session). Only shown when signed in. */
+  totalSegments: number;
+  /** Whether the rider was signed in, so lifetime totals are meaningful. */
+  isSignedIn: boolean;
+}
+
 export interface RideState {
   /** Whether a rideable (node-based) plan exists to start a ride from. */
   canRide: boolean;
@@ -50,6 +61,10 @@ export interface RideState {
   totalMeters: number;
   /** Lock markers: persisted history merged with this ride's completions. */
   lockPoints: LockPoint[];
+  /** Summary of the just-finished ride, or null when none to show. */
+  rideSummary: RideSummary | null;
+  /** Dismiss the end-of-ride summary. */
+  dismissRideSummary: () => void;
 }
 
 interface UseRideOptions {
@@ -86,10 +101,16 @@ export function useRide({
   const [rideCompleted, setRideCompleted] = useState<Map<string, LockPoint>>(
     new Map(),
   );
+  const [rideSummary, setRideSummary] = useState<RideSummary | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
   // Segment keys already sent to the server, so we only persist new ones.
   const savedKeysRef = useRef<Set<string>>(new Set());
+  // Lifetime segment keys as they were when this ride started. Segments
+  // completed during the ride are persisted immediately, which refetches
+  // `history`, so we must diff against this frozen baseline (not live history)
+  // to count what the rider genuinely unlocked this session.
+  const preRideHistoryRef = useRef<Set<string>>(new Set());
 
   const routeCoords = routePlan?.coordinates ?? null;
   const totalMeters = routePlan?.distanceMeters ?? 0;
@@ -199,6 +220,15 @@ export function useRide({
 
   const startRide = useCallback(() => {
     if (!canRide) return;
+    // Start a clean session so the end-of-ride summary reflects only this ride.
+    // Freeze the lifetime history now: segments completed mid-ride are persisted
+    // immediately and refetch `history`, so `stopRide` must diff against this.
+    preRideHistoryRef.current = new Set(
+      (history ?? []).map((h) => h.segmentKey),
+    );
+    setRideCompleted(new Map());
+    savedKeysRef.current = new Set();
+    setRideSummary(null);
     if (!("geolocation" in navigator)) {
       setGpsError("unavailable");
       setIsRiding(true);
@@ -217,16 +247,36 @@ export function useRide({
       },
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 },
     );
-  }, [canRide, handleFix]);
+  }, [canRide, handleFix, history]);
 
   const stopRide = useCallback(() => {
     stopWatch();
     // Final flush of anything not yet persisted.
     persist([...rideCompleted.values()]);
+
+    // Build a satisfying end-of-ride summary. "New" segments are those unlocked
+    // this session that weren't part of the lifetime history *when the ride
+    // started* — diffing against the frozen baseline avoids undercounting, since
+    // completed segments are persisted mid-ride and refetch live `history`.
+    const baseline = preRideHistoryRef.current;
+    let newSegments = 0;
+    for (const key of rideCompleted.keys()) {
+      if (!baseline.has(key)) newSegments++;
+    }
+    const totalSegments = new Set([...baseline, ...rideCompleted.keys()]).size;
+    setRideSummary({
+      distanceMeters: progressMeters,
+      newSegments,
+      totalSegments,
+      isSignedIn,
+    });
+
     setIsRiding(false);
     setRidePosition(null);
     setFollowRide(true);
-  }, [stopWatch, persist, rideCompleted]);
+  }, [stopWatch, persist, rideCompleted, progressMeters, isSignedIn]);
+
+  const dismissRideSummary = useCallback(() => setRideSummary(null), []);
 
   // Clean up the geolocation watch on unmount.
   useEffect(() => stopWatch, [stopWatch]);
@@ -241,6 +291,7 @@ export function useRide({
     setProgressMeters(0);
     setRideCompleted(new Map());
     savedKeysRef.current = new Set();
+    setRideSummary(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routePlan]);
 
@@ -278,5 +329,7 @@ export function useRide({
     progressMeters,
     totalMeters,
     lockPoints,
+    rideSummary,
+    dismissRideSummary,
   };
 }

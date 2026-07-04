@@ -23,7 +23,10 @@ import {
   Globe,
   Play,
   Square,
-  Lock
+  Lock,
+  Bike,
+  Unlock,
+  Trophy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -141,6 +144,8 @@ export default function Home() {
     progressMeters,
     totalMeters,
     lockPoints,
+    rideSummary,
+    dismissRideSummary,
   } = useRide({ routePlan, selectedNodes, isSignedIn: !!user });
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -839,6 +844,73 @@ export default function Home() {
                 <Save className="mr-2 h-4 w-4" />
               )}
               {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* End-of-ride Summary Dialog */}
+      <Dialog
+        open={rideSummary !== null}
+        onOpenChange={(open) => {
+          if (!open) dismissRideSummary();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-primary" />
+              {t("ride.summary.title")}
+            </DialogTitle>
+            <DialogDescription>{t("ride.summary.subtitle")}</DialogDescription>
+          </DialogHeader>
+          {rideSummary && (
+            <div className="flex flex-col gap-3 py-2">
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                <Bike className="h-5 w-5 shrink-0 text-primary" />
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {t("ride.summary.distance")}
+                  </span>
+                  <span className="text-lg font-semibold">
+                    {formatDistance(rideSummary.distanceMeters)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                <Unlock className="h-5 w-5 shrink-0 text-primary" />
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {t("ride.summary.newSegments")}
+                  </span>
+                  <span className="text-lg font-semibold">
+                    {rideSummary.newSegments}
+                  </span>
+                </div>
+              </div>
+              {rideSummary.isSignedIn ? (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                  <Lock className="h-5 w-5 shrink-0 text-primary" />
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {t("ride.summary.totalSegments")}
+                    </span>
+                    <span className="text-lg font-semibold">
+                      {rideSummary.totalSegments}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+                  {t("ride.summary.signInHint")}
+                </p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={dismissRideSummary}>
+              {t("ride.summary.done")}
             </Button>
           </DialogFooter>
         </DialogContent>
