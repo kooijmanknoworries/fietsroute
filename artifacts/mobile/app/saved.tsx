@@ -12,7 +12,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect, type Href } from "expo-router";
-import { useAuth } from "@clerk/expo";
+import { useAuth, useUser } from "@clerk/expo";
 import {
   useListSavedRoutes,
   useDeleteSavedRoute,
@@ -51,7 +51,8 @@ export default function SavedRoutesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, signOut } = useAuth();
+  const { user } = useUser();
   const queryClient = useQueryClient();
   const { loadPlan } = useRoutePlanner();
 
@@ -82,6 +83,35 @@ export default function SavedRoutesScreen() {
     if (router.canGoBack()) router.back();
     else router.replace("/" as Href);
   }, [router]);
+
+  const accountEmail =
+    user?.primaryEmailAddress?.emailAddress ??
+    user?.emailAddresses?.[0]?.emailAddress ??
+    null;
+
+  const confirmSignOut = useCallback(() => {
+    Alert.alert(
+      "Afmelden",
+      "Weet je zeker dat je je wilt afmelden? Je account-routes verdwijnen van dit toestel, lokale back-ups blijven bewaard.",
+      [
+        { text: "Annuleren", style: "cancel" },
+        {
+          text: "Afmelden",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await signOut();
+              await queryClient.invalidateQueries({
+                queryKey: getListSavedRoutesQueryKey(),
+              });
+            } catch {
+              Alert.alert("Fout", "Afmelden is mislukt.");
+            }
+          },
+        },
+      ]
+    );
+  }, [signOut, queryClient]);
 
   const openServerRoute = useCallback(
     async (id: string) => {
@@ -180,20 +210,57 @@ export default function SavedRoutesScreen() {
           In je account
         </Text>
 
-        {!isSignedIn ? (
-          <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-              Meld je aan om routes te synchroniseren met je website-account.
+        <View
+          style={[styles.card, styles.accountCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+          testID="account-card"
+        >
+          <View style={[styles.accountAvatar, { backgroundColor: colors.accent }]}>
+            <Ionicons
+              name={isSignedIn ? "person-circle-outline" : "person-outline"}
+              size={24}
+              color={colors.primary}
+            />
+          </View>
+          <View style={styles.accountBody}>
+            <Text
+              numberOfLines={1}
+              style={[styles.accountEmail, { color: colors.foreground, fontFamily: "Inter_600SemiBold" }]}
+              testID="account-email"
+            >
+              {isSignedIn ? accountEmail ?? "Aangemeld" : "Niet aangemeld"}
             </Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.accountSub, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}
+            >
+              {isSignedIn ? "Routes synchroniseren met je account" : "Niet gesynchroniseerd"}
+            </Text>
+          </View>
+          {isSignedIn ? (
+            <TouchableOpacity
+              onPress={confirmSignOut}
+              style={[styles.accountAction, { borderColor: colors.border }]}
+              testID="sign-out"
+            >
+              <Ionicons name="log-out-outline" size={16} color={colors.destructive} />
+              <Text style={[styles.accountActionText, { color: colors.destructive, fontFamily: "Inter_600SemiBold" }]}>
+                Afmelden
+              </Text>
+            </TouchableOpacity>
+          ) : (
             <TouchableOpacity
               onPress={() => router.push("/(auth)/sign-in" as Href)}
-              style={[styles.signInBtn, { backgroundColor: colors.primary }]}
+              style={[styles.accountAction, { backgroundColor: colors.primary, borderColor: colors.primary }]}
               testID="saved-sign-in"
             >
-              <Text style={[styles.signInBtnText, { fontFamily: "Inter_600SemiBold" }]}>Aanmelden</Text>
+              <Text style={[styles.accountActionText, { color: "#ffffff", fontFamily: "Inter_600SemiBold" }]}>
+                Aanmelden
+              </Text>
             </TouchableOpacity>
-          </View>
-        ) : serverLoading ? (
+          )}
+        </View>
+
+        {!isSignedIn ? null : serverLoading ? (
           <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 16 }} />
         ) : serverError ? (
           <Text style={[styles.emptyText, { color: colors.destructive, fontFamily: "Inter_400Regular" }]}>
@@ -380,15 +447,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  signInBtn: {
+  accountCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  accountAvatar: {
+    width: 44,
     height: 44,
-    borderRadius: 12,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 14,
   },
-  signInBtnText: {
-    color: "#ffffff",
+  accountBody: {
+    flex: 1,
+  },
+  accountEmail: {
     fontSize: 15,
+  },
+  accountSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  accountAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  accountActionText: {
+    fontSize: 14,
   },
 });
