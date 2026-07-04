@@ -24,3 +24,4 @@
 - [Mobile map web shim](mobile-map-web-shim.md) — mobile map on web = Leaflet DOM-tile shim for react-native-maps (no WebGL); runTest can't reach it, verify with screenshot app_preview.
 - [Routeplanner mobile layout](routeplanner-mobile-layout.md) — mobile panel needs >= half viewport so Start ride is reachable; top-right map overlay group must wrap (max-w) to avoid colliding with the left recenter button.
 - [Ride summary](ride-summary.md) — "new segments unlocked" must diff against a start-of-ride history snapshot; live history refetches mid-ride (segments persist on completion) and undercounts to ~0.
+- [Testing async GPS/watch flows](vitest-async-act-watch.md) — sync act()+waitFor doesn't flush floating async chains (expo-location watch); use `await act(async () => { fn(); await delay })` then read mock.calls.

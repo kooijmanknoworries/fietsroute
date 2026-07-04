@@ -18,6 +18,7 @@ import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RoutePlannerProvider } from "@/context/RoutePlannerContext";
+import { RideProvider } from "@/context/RideContext";
 
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
 if (domain) setBaseUrl(`https://${domain}`);
@@ -90,7 +91,9 @@ export default function RootLayout() {
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider>
                   <RoutePlannerProvider>
-                    <RootLayoutNav />
+                    <RideProvider>
+                      <RootLayoutNav />
+                    </RideProvider>
                   </RoutePlannerProvider>
                 </KeyboardProvider>
               </GestureHandlerRootView>

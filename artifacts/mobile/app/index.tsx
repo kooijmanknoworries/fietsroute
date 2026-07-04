@@ -15,8 +15,10 @@ import { useQuery } from "@tanstack/react-query";
 import { getNetwork, MunicipalityResult } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useRoutePlanner, NetworkNode } from "@/context/RoutePlannerContext";
+import { useRideContext } from "@/context/RideContext";
 import RoutePanel from "@/components/RoutePanel";
 import RegionPicker from "@/components/RegionPicker";
+import RideSummaryModal from "@/components/RideSummaryModal";
 
 const INITIAL_REGION: Region = {
   latitude: 52.1,
@@ -55,6 +57,7 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { selectedNodes, routePlan, isPlanning, addNode } = useRoutePlanner();
+  const { ridePosition, rideSummary, dismissRideSummary } = useRideContext();
   const mapRef = useRef<MapView>(null);
 
   const [mapRegion, setMapRegion] = useState<Region>(INITIAL_REGION);
@@ -202,6 +205,19 @@ export default function MapScreen() {
             </View>
           </Marker>
         ))}
+
+        {ridePosition && (
+          <Marker
+            coordinate={{ latitude: ridePosition[1], longitude: ridePosition[0] }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            zIndex={20}
+            testID="ride-position-marker"
+          >
+            <View style={styles.ridePositionOuter}>
+              <View style={[styles.ridePositionDot, { backgroundColor: colors.primary }]} />
+            </View>
+          </Marker>
+        )}
       </MapView>
 
       <RegionPicker
@@ -264,6 +280,8 @@ export default function MapScreen() {
       )}
 
       <RoutePanel />
+
+      <RideSummaryModal summary={rideSummary} onClose={dismissRideSummary} />
     </View>
   );
 }
@@ -306,6 +324,26 @@ const styles = StyleSheet.create({
   selectedMarkerText: {
     fontSize: 13,
     color: "#ffffff",
+  },
+  ridePositionOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.9)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  ridePositionDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: "#ffffff",
   },
   savedBtn: {
     position: "absolute",

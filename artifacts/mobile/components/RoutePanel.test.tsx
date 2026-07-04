@@ -8,18 +8,23 @@ import {
   type NetworkNode,
   type RoutePlan,
 } from "@/context/RoutePlannerContext";
+import { RideProvider } from "@/context/RideContext";
 import RoutePanel from "./RoutePanel";
 
 const apiState = vi.hoisted(() => ({
   planRoute: vi.fn(),
 }));
 
-// RoutePanel renders SaveRouteModal, which calls useSaveRoute (react-query) and
-// writes an on-device backup. Stub the save surface so the panel can mount.
+// RoutePanel renders SaveRouteModal (useSaveRoute) and mounts inside a
+// RideProvider (useRide -> visited-segment hooks). Stub the whole client
+// surface so the panel can mount without a real network layer.
 vi.mock("@workspace/api-client-react", () => ({
   planRoute: (...args: unknown[]) => apiState.planRoute(...args),
   useSaveRoute: () => ({ mutateAsync: vi.fn() }),
   getListSavedRoutesQueryKey: () => ["listSavedRoutes"],
+  useSaveVisitedSegments: () => ({ mutate: vi.fn() }),
+  useListVisitedSegments: () => ({ data: [] }),
+  getListVisitedSegmentsQueryKey: () => ["listVisitedSegments"],
 }));
 
 vi.mock("@/lib/localRoutes", () => ({
@@ -72,8 +77,10 @@ function withQuery(children: ReactNode) {
 function Harness() {
   return withQuery(
     <RoutePlannerProvider>
-      <Controls />
-      <RoutePanel />
+      <RideProvider>
+        <Controls />
+        <RoutePanel />
+      </RideProvider>
     </RoutePlannerProvider>,
   );
 }
@@ -146,8 +153,10 @@ function ControlsTwo() {
 function HarnessWithTwo() {
   return withQuery(
     <RoutePlannerProvider>
-      <ControlsTwo />
-      <RoutePanel />
+      <RideProvider>
+        <ControlsTwo />
+        <RoutePanel />
+      </RideProvider>
     </RoutePlannerProvider>,
   );
 }
