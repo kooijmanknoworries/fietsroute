@@ -8,21 +8,16 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
-import { Stack, router, type Href } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useRef } from "react";
-import { Alert } from "react-native";
+import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import {
-  createUnauthorizedHandler,
-  setBaseUrl,
-  setAuthTokenGetter,
-  setUnauthorizedHandler,
-} from "@workspace/api-client-react";
+import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SessionExpiredHandler } from "@/components/SessionExpiredHandler";
 import { RoutePlannerProvider } from "@/context/RoutePlannerContext";
 import { RideProvider } from "@/context/RideContext";
 
@@ -52,53 +47,6 @@ function AuthTokenBridge() {
   useEffect(() => {
     queryClient.invalidateQueries();
   }, [isSignedIn]);
-
-  return null;
-}
-
-// A 401 mid-ride might mean a genuinely expired/revoked Clerk session, but far
-// more often it's a transient blip (a momentarily-stale token that Clerk
-// refreshes moments later). So before prompting we ask Clerk for a fresh token;
-// only when that fails do we alert the rider and route them to sign-in instead
-// of surfacing a generic "kan niet laden" failure. Because RoutePlannerProvider
-// sits above the router, an in-progress route survives the navigation, so the
-// rider returns to it after re-authenticating.
-function SessionExpiredHandler() {
-  const { getToken, isLoaded } = useAuth();
-  // Only one alert on screen at a time.
-  const promptOpenRef = useRef(false);
-  const getTokenRef = useRef(getToken);
-  getTokenRef.current = getToken;
-  const isLoadedRef = useRef(isLoaded);
-  isLoadedRef.current = isLoaded;
-
-  useEffect(() => {
-    const handler = createUnauthorizedHandler({
-      getToken: (opts) => getTokenRef.current(opts),
-      isReady: () => isLoadedRef.current,
-      onExpired: () => {
-        if (promptOpenRef.current) return;
-        promptOpenRef.current = true;
-
-        Alert.alert(
-          "Je sessie is verlopen",
-          "Log opnieuw in om verder te gaan. Je route blijft bewaard.",
-          [
-            {
-              text: "Opnieuw inloggen",
-              onPress: () => {
-                promptOpenRef.current = false;
-                router.push("/(auth)/sign-in" as Href);
-              },
-            },
-          ],
-          { onDismiss: () => (promptOpenRef.current = false) },
-        );
-      },
-    });
-    setUnauthorizedHandler(handler);
-    return () => setUnauthorizedHandler(null);
-  }, []);
 
   return null;
 }

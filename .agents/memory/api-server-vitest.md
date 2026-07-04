@@ -11,6 +11,10 @@ Tests live as `src/**/*.test.{ts,tsx}`, run with `vitest run` (`pnpm --filter
 (mirroring vite.config.ts). The whole project test validation is `pnpm -r
 --if-present run test`.
 
+**No jest-dom or user-event installed** in routeplanner — only `@testing-library/react`/`dom`. Assert with plain matchers (`expect(el).toBeTruthy()`, `.textContent`), and simulate clicks with `fireEvent`, not `userEvent`.
+
+**`import.meta.url` is not a `file://` URL under the vitest transform** — `readFileSync(new URL(...))` throws "URL must be of scheme file". Use `resolve(import.meta.dirname, "...")` for source-wiring guards.
+
 **Mock Clerk + the generated API client** rather than rendering heavy components.
 The import-prompt logic lives entirely in the `useClaimAnonymousRoutes` hook
 (Home.tsx binds `<Dialog open={canClaim}>` and its buttons straight to the hook),
