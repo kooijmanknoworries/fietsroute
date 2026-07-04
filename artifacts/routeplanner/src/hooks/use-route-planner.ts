@@ -192,7 +192,13 @@ function trailingDelayMs(reversing: boolean): number | null {
 
 export function useRoutePlanner() {
   const queryClient = useQueryClient();
-  const { isSignedIn, userId } = useAuth();
+  const { isLoaded: isAuthLoaded, isSignedIn, userId } = useAuth();
+  // Every API endpoint requires an authenticated Clerk session, so hold all
+  // network queries until Clerk has finished loading and the rider is signed
+  // in. Firing earlier just produces a guaranteed 401 per endpoint (noisy
+  // server logs, wasted requests) that immediately refetches once the token
+  // becomes available anyway.
+  const isAuthReady = isAuthLoaded && !!isSignedIn;
   const { t } = useI18n();
   const tRef = useRef(t);
   tRef.current = t;
@@ -274,7 +280,7 @@ export function useRoutePlanner() {
     { bbox: debouncedBbox },
     { 
       query: { 
-        enabled: !!debouncedBbox, 
+        enabled: isAuthReady && !!debouncedBbox, 
         queryKey: getGetNetworkQueryKey({ bbox: debouncedBbox }),
         placeholderData: keepPreviousData,
       } 
@@ -365,7 +371,8 @@ export function useRoutePlanner() {
   // Regions Query
   const { data: regions } = useGetRegions({
     query: {
-      queryKey: getGetRegionsQueryKey()
+      queryKey: getGetRegionsQueryKey(),
+      enabled: isAuthReady,
     }
   });
 
