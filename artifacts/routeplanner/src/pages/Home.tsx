@@ -26,7 +26,9 @@ import {
   Lock,
   Bike,
   Unlock,
-  Trophy
+  Trophy,
+  Clock,
+  Gauge
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -296,6 +298,17 @@ export default function Home() {
 
   const formatDistance = (meters: number) => {
     return (meters / 1000).toFixed(1) + " km";
+  };
+
+  const formatDuration = (seconds: number) => {
+    const total = Math.round(seconds);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    if (h > 0) {
+      return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+    return `${m}:${String(s).padStart(2, "0")}`;
   };
 
   return (
@@ -874,6 +887,30 @@ export default function Home() {
                   </span>
                   <span className="text-lg font-semibold">
                     {formatDistance(rideSummary.distanceMeters)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                <Clock className="h-5 w-5 shrink-0 text-primary" />
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {t("ride.summary.time")}
+                  </span>
+                  <span className="text-lg font-semibold">
+                    {formatDuration(rideSummary.durationSeconds)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                <Gauge className="h-5 w-5 shrink-0 text-primary" />
+                <div className="flex flex-1 items-center justify-between">
+                  <span className="text-sm text-muted-foreground">
+                    {t("ride.summary.avgSpeed")}
+                  </span>
+                  <span className="text-lg font-semibold">
+                    {rideSummary.avgSpeedKmh !== null
+                      ? `${rideSummary.avgSpeedKmh.toFixed(1)} km/h`
+                      : "—"}
                   </span>
                 </div>
               </div>

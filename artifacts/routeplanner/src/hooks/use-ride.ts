@@ -29,6 +29,13 @@ export interface LockPoint {
 export interface RideSummary {
   /** Distance ridden during this session, in metres. */
   distanceMeters: number;
+  /** Wall-clock elapsed time from start to stop, in seconds. */
+  durationSeconds: number;
+  /**
+   * Average speed in km/h, from distance over elapsed wall-clock time. Null when
+   * the ride was too short to compute a meaningful figure.
+   */
+  avgSpeedKmh: number | null;
   /** Segments unlocked this session that weren't already in lifetime history. */
   newSegments: number;
   /** Lifetime unique segments (history + this session). Only shown when signed in. */
@@ -104,6 +111,10 @@ export function useRide({
   const [rideSummary, setRideSummary] = useState<RideSummary | null>(null);
 
   const watchIdRef = useRef<number | null>(null);
+  // Wall-clock timestamp (ms) when the current ride started, used to compute
+  // elapsed time and average speed for the summary. Wall-clock time absorbs GPS
+  // gaps and pauses gracefully — the rider's total ride time is start-to-stop.
+  const rideStartRef = useRef<number | null>(null);
   // Segment keys already sent to the server, so we only persist new ones.
   const savedKeysRef = useRef<Set<string>>(new Set());
   // Lifetime segment keys as they were when this ride started. Segments
@@ -226,6 +237,7 @@ export function useRide({
     preRideHistoryRef.current = new Set(
       (history ?? []).map((h) => h.segmentKey),
     );
+    rideStartRef.current = Date.now();
     setRideCompleted(new Map());
     savedKeysRef.current = new Set();
     setRideSummary(null);
@@ -264,8 +276,22 @@ export function useRide({
       if (!baseline.has(key)) newSegments++;
     }
     const totalSegments = new Set([...baseline, ...rideCompleted.keys()]).size;
+
+    // Elapsed time and average speed use wall-clock start-to-stop time, which
+    // handles GPS gaps and pauses gracefully. Avg speed is left null for very
+    // short rides where the figure would be noisy/meaningless.
+    const startedAt = rideStartRef.current;
+    const durationSeconds =
+      startedAt !== null ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
+    const avgSpeedKmh =
+      durationSeconds >= 1 && progressMeters > 0
+        ? progressMeters / 1000 / (durationSeconds / 3600)
+        : null;
+
     setRideSummary({
       distanceMeters: progressMeters,
+      durationSeconds,
+      avgSpeedKmh,
       newSegments,
       totalSegments,
       isSignedIn,

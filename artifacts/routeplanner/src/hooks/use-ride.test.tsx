@@ -151,6 +151,55 @@ describe("useRide end-of-ride summary", () => {
     expect(summary?.totalSegments).toBe(2);
   });
 
+  it("reports elapsed time and average speed from wall-clock start-to-stop", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-04T10:00:00Z"));
+
+      const { result } = renderHook(
+        () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+        { wrapper },
+      );
+
+      act(() => result.current.startRide());
+      fix(2, 0); // drive to the end so full distance is covered
+      // One hour of wall-clock time passes before stopping.
+      vi.setSystemTime(new Date("2026-07-04T11:00:00Z"));
+      act(() => result.current.stopRide());
+
+      const summary = result.current.rideSummary;
+      expect(summary?.durationSeconds).toBeCloseTo(3600, 0);
+      // ~222 km over 1 hour → ~222 km/h (route geometry, not realistic speed).
+      const expectedKmh = (summary!.distanceMeters / 1000) / 1;
+      expect(summary?.avgSpeedKmh).toBeCloseTo(expectedKmh, 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves average speed null for an instant ride", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-04T10:00:00Z"));
+
+      const { result } = renderHook(
+        () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+        { wrapper },
+      );
+
+      act(() => result.current.startRide());
+      fix(2, 0);
+      // Stop with no wall-clock time elapsed.
+      act(() => result.current.stopRide());
+
+      const summary = result.current.rideSummary;
+      expect(summary?.durationSeconds).toBe(0);
+      expect(summary?.avgSpeedKmh).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clears the summary when a new ride starts", () => {
     const { result } = renderHook(
       () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
