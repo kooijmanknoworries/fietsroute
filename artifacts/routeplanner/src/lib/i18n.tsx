@@ -63,6 +63,8 @@ const en = {
   "ride.gpsUnavailable": "Can't get your location right now. Recolouring will resume once a GPS signal returns.",
   "ride.signInToSaveHistory": "Sign in to keep a permanent record of the segments you've ridden.",
   "ride.waitingForGps": "Waiting for GPS signal…",
+  "ride.recenter": "Recenter on me",
+  "ride.recenterTitle": "Resume following your live position",
 
   "saved.title": "Saved Routes",
   "saved.signInPrompt": "Sign in to save routes and reach them from any device.",
@@ -191,6 +193,8 @@ const nl: Record<TranslationKey, string> = {
   "ride.gpsUnavailable": "Je locatie is nu niet beschikbaar. Het herkleuren gaat verder zodra er weer een gps-signaal is.",
   "ride.signInToSaveHistory": "Log in om een blijvend overzicht van je gereden segmenten te bewaren.",
   "ride.waitingForGps": "Wachten op gps-signaal…",
+  "ride.recenter": "Centreer op mij",
+  "ride.recenterTitle": "Ga verder met het volgen van je live positie",
   "route.nodesCount": "{count} knooppunten",
 
   "saved.title": "Opgeslagen routes",

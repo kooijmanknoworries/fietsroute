@@ -38,6 +38,10 @@ export interface RideState {
   ridePosition: LngLat | null;
   /** Whether the map should recenter to follow the rider. */
   followRide: boolean;
+  /** Stop auto-following (called when the rider pans/zooms the map). */
+  pauseFollow: () => void;
+  /** Resume auto-following and recenter on the live position. */
+  resumeFollow: () => void;
   /** The travelled portion of the route, for recolouring. */
   traveledCoordinates: number[][] | null;
   /** Distance ridden so far, in metres. */
@@ -180,6 +184,12 @@ export function useRide({
     [routeCoords, segments, persist],
   );
 
+  // Temporarily stop the map from snapping back to the rider (they panned or
+  // zoomed to look ahead); resume re-enables following, which immediately
+  // recenters on the current position via the map's follow effect.
+  const pauseFollow = useCallback(() => setFollowRide(false), []);
+  const resumeFollow = useCallback(() => setFollowRide(true), []);
+
   const stopWatch = useCallback(() => {
     if (watchIdRef.current !== null && "geolocation" in navigator) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -262,6 +272,8 @@ export function useRide({
     gpsError,
     ridePosition,
     followRide,
+    pauseFollow,
+    resumeFollow,
     traveledCoordinates,
     progressMeters,
     totalMeters,

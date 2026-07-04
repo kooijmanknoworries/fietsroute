@@ -135,6 +135,8 @@ export default function Home() {
     gpsError,
     ridePosition,
     followRide,
+    pauseFollow,
+    resumeFollow,
     traveledCoordinates,
     progressMeters,
     totalMeters,
@@ -803,6 +805,8 @@ export default function Home() {
           traveledCoordinates={traveledCoordinates}
           visitedLockPoints={lockPoints}
           followRide={followRide}
+          onFollowPause={pauseFollow}
+          onFollowResume={resumeFollow}
         />
       </div>
 

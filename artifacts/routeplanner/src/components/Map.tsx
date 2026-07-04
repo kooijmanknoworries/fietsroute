@@ -53,6 +53,10 @@ interface MapProps {
   visitedLockPoints?: { lon: number; lat: number }[];
   /** Whether the map recenters to follow the rider. Defaults to true. */
   followRide?: boolean;
+  /** Called when the rider pans/zooms the map by hand during a ride. */
+  onFollowPause?: () => void;
+  /** Called when the rider taps the "recenter on me" control. */
+  onFollowResume?: () => void;
 }
 
 // Free, keyless raster basemaps. The CARTO styles' "@2x" variant serves high-
@@ -233,6 +237,8 @@ export default function Map({
   traveledCoordinates,
   visitedLockPoints,
   followRide = true,
+  onFollowPause,
+  onFollowResume,
 }: MapProps) {
   const { t } = useI18n();
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -242,6 +248,14 @@ export default function Map({
   const onBboxChangeRef = useRef(onBboxChange);
   const lastCenterRef = useRef<{ lon: number; lat: number } | null>(null);
   const rideMarkerRef = useRef<maplibregl.Marker | null>(null);
+  // Latest follow state, ride position, and pause callback, read from inside the
+  // map's (once-registered) gesture handler so it always sees current values.
+  const followRideRef = useRef(followRide);
+  followRideRef.current = followRide;
+  const ridePositionRef = useRef(ridePosition);
+  ridePositionRef.current = ridePosition;
+  const onFollowPauseRef = useRef(onFollowPause);
+  onFollowPauseRef.current = onFollowPause;
   const [mapError, setMapError] = useState(false);
   const [baseLayer, setBaseLayerState] = useState<BaseLayer>(() => getBaseLayer());
   const baseLayerRef = useRef<BaseLayer>(baseLayer);
@@ -694,6 +708,17 @@ export default function Map({
 
       m.on("moveend", updateBbox);
       updateBbox();
+
+      // Pause auto-follow when the rider pans/zooms by hand. A user gesture
+      // carries an originalEvent; the follow easeTo (and other programmatic
+      // moves) do not, so this only fires on genuine rider interaction and
+      // never feeds back on the follow animation itself.
+      m.on("movestart", (e) => {
+        if (!e.originalEvent) return;
+        if (followRideRef.current && ridePositionRef.current) {
+          onFollowPauseRef.current?.();
+        }
+      });
     });
 
   }, []);
@@ -1046,16 +1071,28 @@ export default function Map({
   return (
     <div className="relative w-full h-full">
       <div ref={mapContainer} className="w-full h-full bg-muted" />
-      {!mapError && onRecenter && (
-        <div className="absolute left-3 top-3 z-10">
-          <button
-            type="button"
-            onClick={onRecenter}
-            title={t("map.centerTitle")}
-            className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent"
-          >
-            <LocateFixed className="h-3.5 w-3.5" /> {t("map.center")}
-          </button>
+      {!mapError && (onRecenter || (ridePosition && !followRide)) && (
+        <div className="absolute left-3 top-3 z-10 flex flex-col items-start gap-2">
+          {ridePosition && !followRide && onFollowResume && (
+            <button
+              type="button"
+              onClick={onFollowResume}
+              title={t("ride.recenterTitle")}
+              className="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-md backdrop-blur transition-colors hover:bg-primary/90"
+            >
+              <LocateFixed className="h-3.5 w-3.5" /> {t("ride.recenter")}
+            </button>
+          )}
+          {onRecenter && (
+            <button
+              type="button"
+              onClick={onRecenter}
+              title={t("map.centerTitle")}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent"
+            >
+              <LocateFixed className="h-3.5 w-3.5" /> {t("map.center")}
+            </button>
+          )}
         </div>
       )}
       {!mapError && (
