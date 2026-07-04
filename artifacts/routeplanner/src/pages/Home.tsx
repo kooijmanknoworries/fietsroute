@@ -296,7 +296,7 @@ export default function Home() {
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden flex-col md:flex-row">
       {/* Sidebar Panel */}
-      <div className="w-full md:w-96 flex-shrink-0 border-b md:border-r border-border bg-card flex flex-col h-1/3 md:h-full z-10 shadow-lg">
+      <div className="w-full md:w-96 flex-shrink-0 border-b md:border-r border-border bg-card flex flex-col h-1/2 md:h-full z-10 shadow-lg">
         <div className="p-4 bg-primary text-primary-foreground">
           <div className="flex items-start justify-between gap-2 mb-1">
             <div className="flex items-center gap-2">
@@ -787,7 +787,7 @@ export default function Home() {
       </div>
 
       {/* Map Area */}
-      <div className="flex-1 relative h-2/3 md:h-full bg-muted">
+      <div className="flex-1 relative h-1/2 md:h-full bg-muted">
         <Map
           nodes={networkData?.nodes || []}
           segments={networkData?.segments || []}

@@ -1096,7 +1096,7 @@ export default function Map({
         </div>
       )}
       {!mapError && (
-        <div className="absolute right-3 top-3 z-10 flex items-start gap-2">
+        <div className="absolute right-3 top-3 z-10 flex flex-wrap items-start justify-end gap-2 max-w-[calc(100%-6rem)]">
           <button
             type="button"
             onClick={toggleLfRoutes}

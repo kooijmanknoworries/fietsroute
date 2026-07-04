@@ -21,3 +21,4 @@
 - [Network dataset freshness](network-dataset-freshness.md) — rolling refresh re-imports oldest chunk on a STALE_MS/chunk cadence; `GET /api/network/status` shows age/coverage; 0 markers ≠ empty dataset.
 - [Ride tracking](ride-tracking.md) — MapLibre icons must be raw ImageData not canvas (jsdom has no 2D ctx); segment id = sorted OSM node-id pair; history persist gated to signed-in.
 - [Mobile map web shim](mobile-map-web-shim.md) — mobile map on web = Leaflet DOM-tile shim for react-native-maps (no WebGL); runTest can't reach it, verify with screenshot app_preview.
+- [Routeplanner mobile layout](routeplanner-mobile-layout.md) — mobile panel needs >= half viewport so Start ride is reachable; top-right map overlay group must wrap (max-w) to avoid colliding with the left recenter button.
