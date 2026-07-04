@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 const { sweepOrphanedAnonymousRoutes } = await import("./saved-routes-sweeper");
 const { db, savedRoutesTable, pool } = await import("@workspace/db");
-const { inArray, eq } = await import("drizzle-orm");
+const { inArray } = await import("drizzle-orm");
 
 const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -47,15 +47,16 @@ describe("sweepOrphanedAnonymousRoutes", () => {
     // (they save with the default current timestamp), so the baseline is stable.
     await sweepOrphanedAnonymousRoutes();
 
-    // Old anonymous routes: owner_key is a bare UUID, older than the 90-day
-    // retention window. These are the only rows the sweep should delete.
+    // Old anonymous routes: owner_key is a bare UUID, older than the retention
+    // window. These are the only rows the sweep should delete.
     const oldAnon1 = await seedRoute(randomUUID(), daysAgo(91));
     const oldAnon2 = await seedRoute(
       randomUUID(),
       new Date(Date.now() - RETENTION_MS - 60 * 60 * 1000),
     );
 
-    // Recent anonymous route: UUID owner but inside the retention window.
+    // Recent anonymous route: UUID owner but inside the retention window. Kept
+    // so the one-time claim migration can still reassign it on sign-in.
     const recentAnon = await seedRoute(randomUUID(), daysAgo(1));
 
     // Signed-in users: owner_key starts with `user_`. Include an id that
