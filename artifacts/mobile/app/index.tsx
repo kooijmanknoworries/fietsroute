@@ -21,6 +21,7 @@ import RoutePanel from "@/components/RoutePanel";
 import RideOverlay from "@/components/RideOverlay";
 import RegionPicker from "@/components/RegionPicker";
 import RideSummaryModal from "@/components/RideSummaryModal";
+import { isPlanningTapAllowed, shouldRenderPlanningMarkers } from "@/lib/planning-guard";
 
 const INITIAL_REGION: Region = {
   latitude: 52.1,
@@ -97,7 +98,7 @@ function MapScreenInner() {
     (node: NetworkNode) => {
       // Ignore planning taps while riding so an accidental marker tap can't
       // mutate the route and abort the ride.
-      if (isRiding) return;
+      if (!isPlanningTapAllowed({ isRiding })) return;
       addNode(node);
     },
     [addNode, isRiding]
@@ -158,7 +159,7 @@ function MapScreenInner() {
           shouldReplaceMapContent={Platform.OS !== "web"}
         />
 
-        {showNodes && !isRiding &&
+        {showNodes && shouldRenderPlanningMarkers({ isRiding }) &&
           networkData?.nodes.map((node) => {
             const isSelected = selectedNodeIds.has(node.id);
             return (
