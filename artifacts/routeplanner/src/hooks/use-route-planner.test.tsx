@@ -17,6 +17,9 @@ import {
 // effect's dependencies without re-issuing real requests.
 const apiState = vi.hoisted(() => ({
   network: { data: { nodes: [] } as unknown, isFetching: false },
+  // Backing store for the mocked usePlanRoute mutation so route-error tests can
+  // swap in a `mutate` that synchronously drives onSuccess / onError.
+  plan: { mutate: (() => {}) as unknown, isPending: false },
 }));
 
 vi.mock("@clerk/react", () => ({
@@ -25,7 +28,7 @@ vi.mock("@clerk/react", () => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   useGetNetwork: () => apiState.network,
-  usePlanRoute: () => ({ mutate: vi.fn(), isPending: false }),
+  usePlanRoute: () => apiState.plan,
   useGetRegions: () => ({ data: undefined }),
   useListSavedRoutes: () => ({ data: undefined, isLoading: false }),
   useSaveRoute: () => ({ mutate: vi.fn(), isPending: false }),
@@ -403,5 +406,122 @@ describe("useRoutePlanner pre-load orchestration", () => {
     });
 
     expect(prefetchSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
+});
+
+describe("useRoutePlanner route error handling", () => {
+  type NetworkNode = { id: string; ref: string; lat: number; lon: number };
+  type PlanCallbacks = {
+    onSuccess: (plan: unknown) => void;
+    onError: (err: unknown) => void;
+  };
+
+  const NODE_A: NetworkNode = { id: "1", ref: "63", lat: 52.0, lon: 5.0 };
+  const NODE_B: NetworkNode = { id: "2", ref: "08", lat: 52.01, lon: 5.01 };
+  const NODE_C: NetworkNode = { id: "3", ref: "12", lat: 52.02, lon: 5.02 };
+  const FAKE_PLAN = { legs: [], nodes: [] } as unknown;
+
+  // NL-only i18n strings (I18nProvider defaults to DEFAULT_LANG = "nl").
+  const MSG_NO_PATH = "Kon geen verbindende route tussen deze knooppunten vinden.";
+  const MSG_COMPUTE_FAILED = "Kon de route niet berekenen.";
+
+  function renderPlanner() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>{children}</I18nProvider>
+      </QueryClientProvider>
+    );
+    return renderHook(() => useRoutePlanner(), { wrapper });
+  }
+
+  afterEach(() => {
+    apiState.plan = { mutate: () => {}, isPending: false };
+    cleanup();
+  });
+
+  it("shows the friendly no-path message on a 422 and reverts the last node", () => {
+    apiState.plan = {
+      mutate: (_vars: unknown, cbs: PlanCallbacks) => {
+        cbs.onError({ status: 422, message: "HTTP 422: Could not locate node" });
+      },
+      isPending: false,
+    };
+
+    const { result } = renderPlanner();
+
+    act(() => {
+      result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      result.current.handleNodeClick(NODE_B);
+    });
+
+    expect(result.current.routeError).toBe(MSG_NO_PATH);
+    expect(result.current.routePlan).toBeNull();
+    // The endpoint that couldn't be routed is rolled back, leaving only NODE_A.
+    expect(result.current.selectedNodes).toHaveLength(1);
+    expect(result.current.selectedNodes[0].id).toBe(NODE_A.id);
+  });
+
+  it("shows the generic compute-failed message for a non-422 error", () => {
+    apiState.plan = {
+      mutate: (_vars: unknown, cbs: PlanCallbacks) => {
+        cbs.onError({ status: 500, message: "boom" });
+      },
+      isPending: false,
+    };
+
+    const { result } = renderPlanner();
+
+    act(() => {
+      result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      result.current.handleNodeClick(NODE_B);
+    });
+
+    expect(result.current.routeError).toBe(MSG_COMPUTE_FAILED);
+  });
+
+  it("keeps the previously computed route when a later re-plan fails", () => {
+    // First plan succeeds and populates routePlan.
+    apiState.plan = {
+      mutate: (_vars: unknown, cbs: PlanCallbacks) => cbs.onSuccess(FAKE_PLAN),
+      isPending: false,
+    };
+
+    const { result, rerender } = renderPlanner();
+
+    act(() => {
+      result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      result.current.handleNodeClick(NODE_B);
+    });
+
+    expect(result.current.routePlan).toBe(FAKE_PLAN);
+
+    // A subsequent click fails to route; the prior route must remain intact.
+    apiState.plan = {
+      mutate: (_vars: unknown, cbs: PlanCallbacks) => {
+        cbs.onError({ status: 422, message: "no path" });
+      },
+      isPending: false,
+    };
+    // Re-render so the hook's memoized handlers capture the new (failing) mutate.
+    act(() => {
+      rerender();
+    });
+
+    act(() => {
+      result.current.handleNodeClick(NODE_C);
+    });
+
+    expect(result.current.routeError).toBe(MSG_NO_PATH);
+    // The previously computed route must survive the failed re-plan.
+    expect(result.current.routePlan).toBe(FAKE_PLAN);
   });
 });

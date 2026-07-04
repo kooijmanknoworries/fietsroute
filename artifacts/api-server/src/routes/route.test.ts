@@ -80,19 +80,49 @@ const DISCONNECTED_ELEMENTS = [
 
 // Two requested nodes that sit close together (valid area) but far from every
 // vertex of the mocked network, so each fails to snap within MAX_SNAP_METERS.
-// Offset to lon ~7 so its bbox/cache key stays disjoint from the cases above.
+// Placed at lat 40 / lon 0 — deliberately OUTSIDE the NL+BE preload bbox — so
+// the shared network_nodes table holds no real vertices near them. (Inside NL,
+// raising the snap tolerance to 500m would let a real preloaded knooppunt snap
+// and this "can't be snapped" case would no longer hold.)
 const UNSNAPPABLE_NODES: TestNode[] = [
-  { id: "21", ref: "21", lat: 52.0, lon: 7.0 },
-  { id: "22", ref: "22", lat: 52.002, lon: 7.002 },
+  { id: "21", ref: "21", lat: 40.0, lon: 0.0 },
+  { id: "22", ref: "22", lat: 40.002, lon: 0.002 },
 ];
 
-// The network lies ~3.4km east of the requested nodes (0.05 deg lon at lat 52),
-// well beyond MAX_SNAP_METERS (200m), so resolveVertex can't snap either node.
+// The network lies ~4.2km east of the requested nodes (0.05 deg lon at lat 40),
+// well beyond MAX_SNAP_METERS (500m), so resolveVertex can't snap either node.
 const UNSNAPPABLE_ELEMENTS = [
-  { type: "node", id: 31, lat: 52.0, lon: 7.05 },
-  { type: "node", id: 32, lat: 52.001, lon: 7.051 },
+  { type: "node", id: 31, lat: 40.0, lon: 0.05 },
+  { type: "node", id: 32, lat: 40.001, lon: 0.051 },
   { type: "way", id: 300, nodes: [31, 32] },
 ];
+
+// Live-Overpass fallback scenario. Kept at lat 41 / lon 0 — a DIFFERENT bbox
+// (hence a different Overpass cache key) than the UNSNAPPABLE case above, so the
+// in-memory L1 Overpass cache populated by that test can't shadow this one.
+const FALLBACK_NODES: TestNode[] = [
+  { id: "81", ref: "81", lat: 41.0, lon: 0.0 },
+  { id: "82", ref: "82", lat: 41.002, lon: 0.002 },
+];
+
+// Live Overpass network covering the FALLBACK request coords: a connected way
+// whose vertices (ids 701-703) sit exactly on the two requested nodes. When the
+// preloaded dataset only holds the far-away network (insertFallbackFarNetwork)
+// the first resolve fails, and this live payload lets the single Overpass retry
+// snap both endpoints and produce a route.
+const FALLBACK_ELEMENTS = [
+  { type: "node", id: 701, lat: 41.0, lon: 0.0 },
+  { type: "node", id: 702, lat: 41.001, lon: 0.001 },
+  { type: "node", id: 703, lat: 41.002, lon: 0.002 },
+  { type: "way", id: 700, nodes: [701, 702, 703] },
+];
+
+// A clicked knooppunt that is a standalone marker: its id (9001) is not part of
+// any stored way, so it never appears in the routing graph, but it sits ~13m
+// from junction node 1 of the connected network. This is exactly the class of
+// node that used to fail with "Could not locate node"; it must snap onto the
+// network and route normally.
+const MARKER_NODE: TestNode = { id: "9001", ref: "63", lat: 52.0001, lon: 5.0001 };
 
 // Two nodes whose padded bbox spans more than MAX_ROUTE_AREA_DEG2 (1.0). With a
 // 0.08 pad on each side a 1.5x1.5 deg span yields (1.66)^2 ~= 2.75 deg^2. These
@@ -115,14 +145,15 @@ const TEST_CACHE_KEYS = [
   routeCacheKey(CONNECTED_NODES),
   routeCacheKey(DISCONNECTED_NODES),
   routeCacheKey(UNSNAPPABLE_NODES),
+  routeCacheKey(FALLBACK_NODES),
 ];
 
 const ALL_TEST_NODE_IDS = [
   "1", "2", "3", "41", "42", "43", "11", "12", "13", "14", "51", "52",
-  "21", "22", "31", "32", "61", "62", "63",
+  "21", "22", "31", "32", "61", "62", "63", "83", "84",
 ];
 const ALL_TEST_SEG_IDS = [
-  "100", "401", "402", "200", "201", "501", "300", "601", "602",
+  "100", "401", "402", "200", "201", "501", "300", "601", "602", "800",
 ];
 
 async function clearFixtures(): Promise<void> {
@@ -220,41 +251,63 @@ async function insertDisconnectedNetwork(): Promise<void> {
 }
 
 async function insertUnsnappableNetwork(): Promise<void> {
-  // Network lies ~3.4km east of requested nodes (0.05 deg lon at lat 52)
+  // Network lies ~4.2km east of requested nodes (0.05 deg lon at lat 40),
+  // outside the NL+BE preload region so no real vertices interfere.
   await db.insert(networkNodesTable).values([
-    { id: "31", ref: "31", lat: 52.0, lon: 7.05 },
-    { id: "32", ref: "32", lat: 52.001, lon: 7.051 },
-    { id: "61", ref: "61", lat: 52.002, lon: 7.052 },
-    { id: "62", ref: "62", lat: 52.003, lon: 7.053 },
-    { id: "63", ref: "63", lat: 52.004, lon: 7.054 },
+    { id: "31", ref: "31", lat: 40.0, lon: 0.05 },
+    { id: "32", ref: "32", lat: 40.001, lon: 0.051 },
+    { id: "61", ref: "61", lat: 40.002, lon: 0.052 },
+    { id: "62", ref: "62", lat: 40.003, lon: 0.053 },
+    { id: "63", ref: "63", lat: 40.004, lon: 0.054 },
   ]);
   await db.insert(networkSegmentsTable).values([
     {
       id: "300",
-      coordinates: [[7.05, 52.0], [7.051, 52.001]],
+      coordinates: [[0.05, 40.0], [0.051, 40.001]],
       nodeIds: [31, 32],
-      minLat: 52.0,
-      maxLat: 52.001,
-      minLon: 7.05,
-      maxLon: 7.051,
+      minLat: 40.0,
+      maxLat: 40.001,
+      minLon: 0.05,
+      maxLon: 0.051,
     },
     {
       id: "601",
-      coordinates: [[7.052, 52.002], [7.053, 52.003]],
+      coordinates: [[0.052, 40.002], [0.053, 40.003]],
       nodeIds: [61, 62],
-      minLat: 52.002,
-      maxLat: 52.003,
-      minLon: 7.052,
-      maxLon: 7.053,
+      minLat: 40.002,
+      maxLat: 40.003,
+      minLon: 0.052,
+      maxLon: 0.053,
     },
     {
       id: "602",
-      coordinates: [[7.053, 52.003], [7.054, 52.004]],
+      coordinates: [[0.053, 40.003], [0.054, 40.004]],
       nodeIds: [62, 63],
-      minLat: 52.003,
-      maxLat: 52.004,
-      minLon: 7.053,
-      maxLon: 7.054,
+      minLat: 40.003,
+      maxLat: 40.004,
+      minLon: 0.053,
+      maxLon: 0.054,
+    },
+  ]);
+}
+
+async function insertFallbackFarNetwork(): Promise<void> {
+  // A far-away (~4.2km) dataset network near the FALLBACK request coords: enough
+  // rows for getNetworkForRoute to use the dataset path, but too distant to snap
+  // (> MAX_SNAP_METERS), so the first resolve fails and the live retry kicks in.
+  await db.insert(networkNodesTable).values([
+    { id: "83", ref: "83", lat: 41.0, lon: 0.05 },
+    { id: "84", ref: "84", lat: 41.001, lon: 0.051 },
+  ]);
+  await db.insert(networkSegmentsTable).values([
+    {
+      id: "800",
+      coordinates: [[0.05, 41.0], [0.051, 41.001]],
+      nodeIds: [83, 84],
+      minLat: 41.0,
+      maxLat: 41.001,
+      minLon: 0.05,
+      maxLon: 0.051,
     },
   ]);
 }
@@ -343,6 +396,25 @@ describe("POST /api/route", () => {
     expect(res.body.legs[0]).toMatchObject({ fromRef: "1", toRef: "3" });
   });
 
+  it("routes from a marker knooppunt that isn't a graph vertex by snapping to the nearest junction", async () => {
+    await insertConnectedNetwork();
+    // Snapping succeeds off the dataset, so the live fallback shouldn't fire;
+    // mock it anyway with the same network to stay robust either way.
+    mockOverpass(CONNECTED_ELEMENTS);
+
+    const res = await request(buildApp())
+      .post("/api/route")
+      .send({ nodes: [MARKER_NODE, CONNECTED_NODES[1]] });
+
+    expect(res.status).toBe(200);
+    // The marker (ref 63) snaps onto junction node 1 and routes through node 2
+    // to node 3.
+    expect(res.body.nodeRefs).toEqual(["63", "3"]);
+    expect(res.body.legs).toHaveLength(1);
+    expect(res.body.distanceMeters).toBeGreaterThan(0);
+    expect(res.body.coordinates.length).toBeGreaterThanOrEqual(2);
+  });
+
   it("returns 422 when no path connects the requested nodes", async () => {
     await insertDisconnectedNetwork();
     // Same-network mock so the live-Overpass fallback path behaves like the
@@ -387,5 +459,24 @@ describe("POST /api/route", () => {
 
     expect(res.status).toBe(422);
     expect(res.body.message).toMatch(/could not locate node/i);
+  });
+
+  it("falls back to live Overpass and routes when the dataset can't resolve an endpoint", async () => {
+    // The preloaded dataset only covers the far-away network, so resolving the
+    // requested endpoints against it fails (they're > MAX_SNAP_METERS away).
+    await insertFallbackFarNetwork();
+    // Live Overpass, however, returns a connected way sitting on the requested
+    // coords — the single retry in planRoute should snap onto it and succeed.
+    mockOverpass(FALLBACK_ELEMENTS);
+
+    const res = await request(buildApp())
+      .post("/api/route")
+      .send({ nodes: FALLBACK_NODES });
+
+    expect(res.status).toBe(200);
+    expect(res.body.nodeRefs).toEqual(["81", "82"]);
+    expect(res.body.legs).toHaveLength(1);
+    expect(res.body.distanceMeters).toBeGreaterThan(0);
+    expect(res.body.coordinates.length).toBeGreaterThanOrEqual(2);
   });
 });

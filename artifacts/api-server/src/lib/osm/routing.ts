@@ -1,9 +1,11 @@
 import {
   haversineMeters,
+  fetchOverpass,
   type Bbox,
   type OverpassResult,
 } from "./overpass";
 import { getNetworkForRoute } from "./dataset";
+import { logger } from "../logger";
 
 export interface RouteRequestNode {
   id: string;
@@ -42,7 +44,15 @@ export class RouteRequestError extends Error {
 
 const MAX_ROUTE_AREA_DEG2 = 1.0;
 const MAX_ROUTE_NODES = 50;
-const MAX_SNAP_METERS = 200;
+// How far a clicked knooppunt may be from the nearest routable graph vertex
+// before we consider it "off the network". Clickable knooppunten come from the
+// full rcn_ref node set, but the routing graph is built only from ways in
+// route=bicycle relations, so a knooppunt can be a standalone marker placed
+// tens (sometimes a few hundred) of metres from the way it belongs to. 500 m
+// comfortably bridges those marker-to-junction offsets while staying well under
+// the typical spacing between distinct knooppunten, so it won't snap to the
+// wrong junction.
+const MAX_SNAP_METERS = 500;
 
 interface Edge {
   to: number;
@@ -194,6 +204,20 @@ function resolveVertex(
   return best === null ? null : { id: best, dist: bestDist };
 }
 
+type ResolvedVertex = { id: number; dist: number } | null;
+
+function resolveAll(
+  data: OverpassResult,
+  graph: Graph,
+  nodes: RouteRequestNode[],
+): ResolvedVertex[] {
+  return nodes.map((n) => resolveVertex(data, graph, n));
+}
+
+function allResolved(resolved: ResolvedVertex[]): boolean {
+  return resolved.every((v) => v !== null && v.dist <= MAX_SNAP_METERS);
+}
+
 function boundingBox(nodes: RouteRequestNode[], pad: number): Bbox {
   let minLon = Infinity;
   let minLat = Infinity;
@@ -236,8 +260,33 @@ export async function planRoute(
     );
   }
 
-  const data = await getNetworkForRoute(bbox);
-  const graph = buildGraph(data);
+  let data = await getNetworkForRoute(bbox);
+  let graph = buildGraph(data);
+  let resolved = resolveAll(data, graph, nodes);
+
+  // Every clickable knooppunt should be routable, but the preloaded dataset can
+  // be incomplete or stale for a given area (e.g. an import gap, or a knooppunt
+  // whose connecting ways aren't stored yet). If any endpoint fails to snap onto
+  // the network, retry once with live Overpass data before giving up — this is
+  // what turns the old "Could not locate node" 422 into a real route for nodes
+  // that simply weren't covered by the local dataset.
+  if (!allResolved(resolved)) {
+    try {
+      const liveData = await fetchOverpass(bbox);
+      const liveGraph = buildGraph(liveData);
+      const liveResolved = resolveAll(liveData, liveGraph, nodes);
+      if (allResolved(liveResolved)) {
+        data = liveData;
+        graph = liveGraph;
+        resolved = liveResolved;
+      }
+    } catch (err) {
+      logger.warn(
+        { err, bbox },
+        "Live Overpass fallback failed while resolving route endpoints",
+      );
+    }
+  }
 
   const legs: RouteLeg[] = [];
   const coordinates: number[][] = [];
@@ -251,8 +300,8 @@ export async function planRoute(
     if (i === 0) nodeRefs.push(from.ref);
     nodeRefs.push(to.ref);
 
-    const startVertex = resolveVertex(data, graph, from);
-    const endVertex = resolveVertex(data, graph, to);
+    const startVertex = resolved[i];
+    const endVertex = resolved[i + 1];
     if (
       startVertex === null ||
       endVertex === null ||

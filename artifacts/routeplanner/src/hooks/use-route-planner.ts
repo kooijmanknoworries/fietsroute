@@ -330,6 +330,16 @@ export function useRoutePlanner() {
   // Route Mutation
   const planRoute = usePlanRoute();
 
+  // Turn an API failure into a short, friendly, translated message instead of
+  // surfacing the raw server text (e.g. "HTTP 422 …: Could not locate node 63
+  // or 08 on the cycling network"). A 422 means the endpoints couldn't be
+  // connected; anything else is treated as a generic compute failure.
+  const messageForRouteError = useCallback((err: unknown): string => {
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 422) return tRef.current("error.noPath");
+    return tRef.current("error.computeFailed");
+  }, []);
+
   const handleNodeClick = useCallback((node: NetworkNode) => {
     setSelectedNodes(prev => {
       // Don't add if it's the exact same node as the last one
@@ -348,7 +358,7 @@ export function useRoutePlanner() {
               setRoutePlan(plan);
             },
             onError: (err) => {
-              setRouteError(err.message || tRef.current("error.noPath"));
+              setRouteError(messageForRouteError(err));
               // revert the last selection if it failed to route
               setSelectedNodes(prevSelection => prevSelection.slice(0, -1));
             }
@@ -358,7 +368,7 @@ export function useRoutePlanner() {
       
       return newSelection;
     });
-  }, [planRoute]);
+  }, [planRoute, messageForRouteError]);
 
   const handleUndo = useCallback(() => {
     setSelectedNodes(prev => {
@@ -373,14 +383,14 @@ export function useRoutePlanner() {
           { data: { nodes: newSelection } },
           {
             onSuccess: (plan) => setRoutePlan(plan),
-            onError: (err) => setRouteError(err.message || tRef.current("error.computeFailed"))
+            onError: (err) => setRouteError(messageForRouteError(err))
           }
         );
       }
       
       return newSelection;
     });
-  }, [planRoute]);
+  }, [planRoute, messageForRouteError]);
 
   const handleClear = useCallback(() => {
     setSelectedNodes([]);
