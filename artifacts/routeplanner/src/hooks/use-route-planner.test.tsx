@@ -22,8 +22,15 @@ const apiState = vi.hoisted(() => ({
   plan: { mutate: (() => {}) as unknown, isPending: false },
 }));
 
+const authState = vi.hoisted(() => ({
+  value: { isSignedIn: false, userId: undefined } as {
+    isSignedIn: boolean;
+    userId: string | undefined;
+  },
+}));
+
 vi.mock("@clerk/react", () => ({
-  useAuth: () => ({ isSignedIn: false }),
+  useAuth: () => authState.value,
 }));
 
 vi.mock("@workspace/api-client-react", () => ({
@@ -523,5 +530,125 @@ describe("useRoutePlanner route error handling", () => {
     expect(result.current.routeError).toBe(MSG_NO_PATH);
     // The previously computed route must survive the failed re-plan.
     expect(result.current.routePlan).toBe(FAKE_PLAN);
+  });
+});
+
+describe("useRoutePlanner draft persistence", () => {
+  type Node = { id: string; ref: string; lat: number; lon: number };
+  type PlanCallbacks = {
+    onSuccess: (plan: unknown) => void;
+    onError: (err: unknown) => void;
+  };
+
+  const NODE_A: Node = { id: "1", ref: "63", lat: 52.0, lon: 5.0 };
+  const NODE_B: Node = { id: "2", ref: "08", lat: 52.01, lon: 5.01 };
+  const PLAN = {
+    nodeRefs: ["63", "08"],
+    coordinates: [
+      [5.0, 52.0],
+      [5.01, 52.01],
+    ],
+    distanceMeters: 1000,
+    legs: [],
+  } as unknown;
+
+  function renderPlanner() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>{children}</I18nProvider>
+      </QueryClientProvider>
+    );
+    return renderHook(() => useRoutePlanner(), { wrapper });
+  }
+
+  beforeEach(() => {
+    sessionStorage.clear();
+    apiState.plan = {
+      mutate: (_vars: unknown, cbs: PlanCallbacks) => cbs.onSuccess(PLAN),
+      isPending: false,
+    };
+  });
+
+  afterEach(() => {
+    apiState.plan = { mutate: () => {}, isPending: false };
+    authState.value = { isSignedIn: false, userId: undefined };
+    sessionStorage.clear();
+    cleanup();
+  });
+
+  it("persists the in-progress route and restores it on a fresh mount", () => {
+    authState.value = { isSignedIn: true, userId: "user_a" };
+
+    const first = renderPlanner();
+    act(() => {
+      first.result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      first.result.current.handleNodeClick(NODE_B);
+    });
+    expect(first.result.current.selectedNodes).toHaveLength(2);
+    expect(first.result.current.routePlan).toBe(PLAN);
+
+    // Simulate the forced sign-in redirect unmounting Home, then remounting
+    // after re-auth as the same user.
+    first.unmount();
+    const second = renderPlanner();
+
+    expect(second.result.current.selectedNodes.map((n) => n.id)).toEqual([
+      NODE_A.id,
+      NODE_B.id,
+    ]);
+    expect(second.result.current.routePlan).toEqual(PLAN);
+  });
+
+  it("does not restore one user's route for a different signed-in user", () => {
+    authState.value = { isSignedIn: true, userId: "user_a" };
+    const first = renderPlanner();
+    act(() => {
+      first.result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      first.result.current.handleNodeClick(NODE_B);
+    });
+    first.unmount();
+
+    authState.value = { isSignedIn: true, userId: "user_b" };
+    const second = renderPlanner();
+    expect(second.result.current.selectedNodes).toHaveLength(0);
+    expect(second.result.current.routePlan).toBeNull();
+  });
+
+  it("clears the persisted draft when the route is cleared", () => {
+    authState.value = { isSignedIn: true, userId: "user_a" };
+    const first = renderPlanner();
+    act(() => {
+      first.result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      first.result.current.handleNodeClick(NODE_B);
+    });
+    act(() => {
+      first.result.current.handleClear();
+    });
+    first.unmount();
+
+    const second = renderPlanner();
+    expect(second.result.current.selectedNodes).toHaveLength(0);
+    expect(second.result.current.routePlan).toBeNull();
+  });
+
+  it("does not persist for signed-out visitors", () => {
+    authState.value = { isSignedIn: false, userId: undefined };
+    const { result } = renderPlanner();
+    act(() => {
+      result.current.handleNodeClick(NODE_A);
+    });
+    act(() => {
+      result.current.handleNodeClick(NODE_B);
+    });
+    expect(sessionStorage.length).toBe(0);
   });
 });

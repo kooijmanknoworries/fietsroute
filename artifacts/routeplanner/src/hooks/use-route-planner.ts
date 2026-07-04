@@ -3,6 +3,7 @@ import { useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useAuth } from "@clerk/react";
 import { useDebounce } from "use-debounce";
 import { useI18n } from "@/lib/i18n";
+import { getRouteDraft, setRouteDraft } from "@/lib/route-draft";
 import { 
   useGetNetwork, 
   usePlanRoute, 
@@ -191,7 +192,7 @@ function trailingDelayMs(reversing: boolean): number | null {
 
 export function useRoutePlanner() {
   const queryClient = useQueryClient();
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, userId } = useAuth();
   const { t } = useI18n();
   const tRef = useRef(t);
   tRef.current = t;
@@ -226,6 +227,47 @@ export function useRoutePlanner() {
   
   const [importedCoordinates, setImportedCoordinates] = useState<number[][] | null>(null);
   const [flyToRegion, setFlyToRegion] = useState<{ lat: number; lon: number; zoom: number } | null>(null);
+
+  // Persist the in-progress route (selected nodes + computed plan) per signed-in
+  // user so it survives a forced sign-in redirect on web: when a Clerk session
+  // expires mid-planning, HomeGate redirects to /sign-in and unmounts Home,
+  // which would otherwise drop this local state. On remount after re-auth the
+  // draft is restored. Keyed by user id so it never leaks between accounts.
+  //
+  // `persistReady` gates writes until the restore pass for the current user has
+  // run, so the initial empty state on remount can't clobber a stored draft
+  // before it's read back.
+  const [persistReady, setPersistReady] = useState(false);
+  const restoredUserRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!userId) {
+      restoredUserRef.current = null;
+      setPersistReady(false);
+      return;
+    }
+    if (restoredUserRef.current === userId) return;
+    restoredUserRef.current = userId;
+    const draft = getRouteDraft(userId);
+    if (draft && draft.selectedNodes.length > 0) {
+      setSelectedNodes(draft.selectedNodes);
+      setRoutePlan(draft.routePlan);
+      // Bring the restored route back into view so the map matches the sidebar.
+      const coords = draft.routePlan?.coordinates;
+      const viewport = coords?.length
+        ? viewportForCoordinates(coords)
+        : viewportForCoordinates(
+            draft.selectedNodes.map((n) => [n.lon, n.lat]),
+          );
+      if (viewport) setFlyToRegion(viewport);
+    }
+    setPersistReady(true);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || !persistReady) return;
+    setRouteDraft(userId, { selectedNodes, routePlan });
+  }, [userId, persistReady, selectedNodes, routePlan]);
 
   // Network Query
   const { data: networkData, isFetching: isNetworkLoading } = useGetNetwork(
