@@ -26,6 +26,14 @@ export default defineConfig({
         find: /^react-native-safe-area-context$/,
         replacement: path.resolve(dir, "test/mocks/safe-area-context.tsx"),
       },
+      {
+        find: /^@clerk\/expo$/,
+        replacement: path.resolve(dir, "test/mocks/clerk-expo.tsx"),
+      },
+      {
+        find: /^expo-router$/,
+        replacement: path.resolve(dir, "test/mocks/expo-router.tsx"),
+      },
       // react-native -> react-native-web so primitives render to the DOM.
       { find: /^react-native$/, replacement: "react-native-web" },
       // Path alias used across the app.

@@ -170,6 +170,49 @@ describe("RoutePlannerContext route planning", () => {
     expect(result.current.planError).toBeNull();
   });
 
+  it("restores a saved route via loadPlan without re-planning", async () => {
+    apiState.planRoute.mockResolvedValue(makePlan(["63", "08"]));
+    const { result } = renderHook(() => useRoutePlanner(), { wrapper });
+
+    const savedNodes = [NODE_A, NODE_B, NODE_C];
+    const savedPlan = makePlan(["63", "08", "12"]);
+
+    act(() => result.current.loadPlan(savedNodes, savedPlan));
+
+    // Nodes + geometry are adopted directly from the saved route.
+    expect(result.current.selectedNodes).toEqual(savedNodes);
+    expect(result.current.routePlan).toEqual(savedPlan);
+    expect(result.current.planError).toBeNull();
+    expect(result.current.isPlanning).toBe(false);
+    // Restoring must not trigger a fresh route computation.
+    expect(apiState.planRoute).not.toHaveBeenCalled();
+  });
+
+  it("discards an in-flight plan when a saved route is loaded", async () => {
+    // A slow request is in flight when the user reopens a saved route. When it
+    // finally resolves it must not clobber the restored plan.
+    let resolveSlow: (plan: RoutePlan) => void = () => {};
+    apiState.planRoute.mockImplementationOnce(
+      () => new Promise<RoutePlan>((res) => (resolveSlow = res)),
+    );
+
+    const { result } = renderHook(() => useRoutePlanner(), { wrapper });
+
+    act(() => result.current.addNode(NODE_A));
+    act(() => result.current.addNode(NODE_B)); // kicks off the slow request
+
+    const savedPlan = makePlan(["63", "08", "12"]);
+    act(() => result.current.loadPlan([NODE_A, NODE_B, NODE_C], savedPlan));
+    expect(result.current.routePlan).toEqual(savedPlan);
+
+    await act(async () => {
+      resolveSlow(makePlan(["63", "08"]));
+      await Promise.resolve();
+    });
+
+    expect(result.current.routePlan).toEqual(savedPlan);
+  });
+
   it("drops a stale in-flight response when the selection changes again", async () => {
     // First plan is slow; a second selection change supersedes it. When the
     // slow response finally resolves it must be ignored (generation guard).

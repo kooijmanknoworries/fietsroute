@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   RoutePlannerProvider,
   useRoutePlanner,
@@ -12,8 +14,16 @@ const apiState = vi.hoisted(() => ({
   planRoute: vi.fn(),
 }));
 
+// RoutePanel renders SaveRouteModal, which calls useSaveRoute (react-query) and
+// writes an on-device backup. Stub the save surface so the panel can mount.
 vi.mock("@workspace/api-client-react", () => ({
   planRoute: (...args: unknown[]) => apiState.planRoute(...args),
+  useSaveRoute: () => ({ mutateAsync: vi.fn() }),
+  getListSavedRoutesQueryKey: () => ["listSavedRoutes"],
+}));
+
+vi.mock("@/lib/localRoutes", () => ({
+  saveLocalRoute: vi.fn(),
 }));
 
 const NODE_A: NetworkNode = { id: "1", ref: "63", lat: 52.0, lon: 5.0 };
@@ -52,12 +62,19 @@ function Controls() {
   );
 }
 
+function withQuery(children: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
 function Harness() {
-  return (
+  return withQuery(
     <RoutePlannerProvider>
       <Controls />
       <RoutePanel />
-    </RoutePlannerProvider>
+    </RoutePlannerProvider>,
   );
 }
 
@@ -127,10 +144,10 @@ function ControlsTwo() {
 }
 
 function HarnessWithTwo() {
-  return (
+  return withQuery(
     <RoutePlannerProvider>
       <ControlsTwo />
       <RoutePanel />
-    </RoutePlannerProvider>
+    </RoutePlannerProvider>,
   );
 }
