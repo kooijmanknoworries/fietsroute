@@ -8,6 +8,7 @@ import regionsRouter from "./regions";
 import geocodeRouter from "./geocode";
 import savedRoutesRouter from "./saved-routes";
 import visitedSegmentsRouter from "./visited-segments";
+import accessRouter from "./access";
 
 const router: IRouter = Router();
 
@@ -26,6 +27,7 @@ router.use(lfRoutesRouter);
 router.use(routeRouter);
 router.use(regionsRouter);
 router.use(geocodeRouter);
+router.use(accessRouter);
 router.use(savedRoutesRouter);
 router.use(visitedSegmentsRouter);
 

@@ -315,3 +315,49 @@ export const SaveVisitedSegmentsResponse = zod.object({
 })
 
 
+/**
+ * Returns whether the signed-in user is pending, approved, or rejected. Called by the web and mobile clients after sign-in so the UI knows whether to show the waiting-for-approval notice and enable the Save route / Start ride controls. Creates the user's access record on first call (owner email auto-approved, everyone else pending).
+
+ * @summary Get the current user's access status
+ */
+export const GetMyAccessResponse = zod.object({
+  "status": zod.enum(['pending', 'approved', 'rejected']).describe('The signed-in user\'s access status.'),
+  "isOwner": zod.boolean().describe('True if the signed-in user is the fixed owner (admin).')
+})
+
+
+/**
+ * Returns every known user with their email, status, and sign-up time, most recent first. Restricted to the owner email, verified server-side.
+
+ * @summary List all users and their access status (owner only)
+ */
+export const ListUserAccessResponseItem = zod.object({
+  "userId": zod.string().describe('The Clerk user id.'),
+  "email": zod.string().nullable().describe('The user\'s email, read from Clerk, or null if unknown.'),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "createdAt": zod.coerce.date().describe('When the user first signed in.')
+})
+export const ListUserAccessResponse = zod.array(ListUserAccessResponseItem)
+
+
+/**
+ * Sets a user's access status. Approving instantly unlocks full access; rejecting/removing blocks them and can be undone by approving later. Restricted to the owner email, verified server-side.
+
+ * @summary Approve, reject, or remove a user (owner only)
+ */
+export const SetUserAccessParams = zod.object({
+  "id": zod.coerce.string().describe('The Clerk user id whose status is being changed.')
+})
+
+export const SetUserAccessBody = zod.object({
+  "status": zod.enum(['pending', 'approved', 'rejected']).describe('The new access status to set for the user.')
+})
+
+export const SetUserAccessResponse = zod.object({
+  "userId": zod.string().describe('The Clerk user id.'),
+  "email": zod.string().nullable().describe('The user\'s email, read from Clerk, or null if unknown.'),
+  "status": zod.enum(['pending', 'approved', 'rejected']),
+  "createdAt": zod.coerce.date().describe('When the user first signed in.')
+})
+
+

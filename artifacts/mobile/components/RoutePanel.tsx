@@ -18,6 +18,7 @@ import Animated, {
 import { useColors } from "@/hooks/useColors";
 import { useRoutePlanner } from "@/context/RoutePlannerContext";
 import { useRideContext } from "@/context/RideContext";
+import { useAccessStatus } from "@/hooks/useAccessStatus";
 import SaveRouteModal from "@/components/SaveRouteModal";
 
 function formatDistance(meters: number): string {
@@ -33,10 +34,14 @@ export default function RoutePanel() {
   const { selectedNodes, routePlan, isPlanning, planError, clearRoute, undoLastNode, removeNode } =
     useRoutePlanner();
   const { canRide, isRiding, startRide } = useRideContext();
+  const { isPending, isRejected } = useAccessStatus();
+  // Signed-in but not yet approved: browsing stays open, but Save route and
+  // Start ride are gated (the server also enforces this with a 403).
+  const writeBlocked = isPending || isRejected;
 
   const [saveVisible, setSaveVisible] = useState(false);
 
-  const canSave = selectedNodes.length >= 2 && !!routePlan;
+  const canSave = selectedNodes.length >= 2 && !!routePlan && !writeBlocked;
 
   const translateY = useSharedValue(200);
 
@@ -177,7 +182,33 @@ export default function RoutePanel() {
         </View>
       )}
 
-      {canRide && (
+      {writeBlocked && (
+        <View
+          style={[
+            styles.noticeSection,
+            { borderTopColor: colors.border },
+          ]}
+          testID="access-notice"
+        >
+          <Ionicons
+            name="lock-closed-outline"
+            size={16}
+            color={colors.mutedForeground}
+          />
+          <Text
+            style={[
+              styles.noticeText,
+              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+            ]}
+          >
+            {isRejected
+              ? "Je account heeft geen toegang. Je kunt de kaart bekijken, maar opslaan en ritten zijn uitgeschakeld."
+              : "Je account wacht op goedkeuring. Je kunt de kaart bekijken, maar opslaan en ritten zijn uitgeschakeld tot je bent goedgekeurd."}
+          </Text>
+        </View>
+      )}
+
+      {canRide && !writeBlocked && (
         <View style={[styles.rideSection, { borderTopColor: colors.border }]}>
           <TouchableOpacity
             onPress={startRide}
@@ -309,6 +340,19 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     paddingTop: 12,
     marginTop: 8,
+  },
+  noticeSection: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    borderTopWidth: 1,
+    paddingTop: 12,
+    marginTop: 8,
+  },
+  noticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   rideStartBtn: {
     flexDirection: "row",

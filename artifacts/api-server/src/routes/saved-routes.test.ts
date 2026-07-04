@@ -11,10 +11,25 @@ vi.mock("@clerk/express", () => ({
     const userId = req.headers["x-test-user"];
     return { userId: typeof userId === "string" && userId ? userId : null };
   },
+  // The approval gate reads the user's email from Clerk. Returning the owner
+  // email auto-approves every test user so write endpoints stay reachable; the
+  // gate's pending/rejected behaviour is exercised in access.test.ts.
+  clerkClient: {
+    users: {
+      getUser: async () => ({
+        primaryEmailAddressId: "e1",
+        emailAddresses: [
+          { id: "e1", emailAddress: "nicokooijman@gmail.com" },
+        ],
+      }),
+    },
+  },
 }));
 
 const { default: savedRoutesRouter } = await import("./saved-routes");
-const { db, savedRoutesTable, pool } = await import("@workspace/db");
+const { db, savedRoutesTable, userAccessTable, pool } = await import(
+  "@workspace/db"
+);
 const { inArray, eq } = await import("drizzle-orm");
 
 function makeApp(): Express {
@@ -107,6 +122,9 @@ afterAll(async () => {
     await db
       .delete(savedRoutesTable)
       .where(inArray(savedRoutesTable.ownerKey, [...usedOwners]));
+    await db
+      .delete(userAccessTable)
+      .where(inArray(userAccessTable.userId, [...usedOwners]));
   }
   await pool.end();
 });

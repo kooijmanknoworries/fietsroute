@@ -8,6 +8,7 @@ import {
   SaveVisitedSegmentsResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
+import { requireApproved } from "../lib/access";
 
 const router: IRouter = Router();
 
@@ -48,6 +49,7 @@ router.get(
 router.post(
   "/visited-segments",
   requireAuth,
+  requireApproved,
   async (req, res): Promise<void> => {
     const ownerKey = getAuth(req).userId!;
 

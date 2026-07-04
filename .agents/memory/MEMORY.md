@@ -26,3 +26,4 @@
 - [Ride summary](ride-summary.md) — "new segments unlocked" must diff against a start-of-ride history snapshot; live history refetches mid-ride (segments persist on completion) and undercounts to ~0.
 - [Testing async GPS/watch flows](vitest-async-act-watch.md) — sync act()+waitFor doesn't flush floating async chains (expo-location watch); use `await act(async () => { fn(); await delay })` then read mock.calls.
 - [Passive-effect abort race in RTL](passive-effect-abort-race.md) — an effect that aborts on state change can revert a click's action if its passive pass flushes after the click; flush with `await act(async()=>{await Promise.resolve()})` before the click.
+- [New-user approval gate](access-gate.md) — writes gated by requireApproved (403), reads open; owner by fixed email fetched server-side; write-endpoint tests must mock clerkClient.users.getUser + clean user_access rows.

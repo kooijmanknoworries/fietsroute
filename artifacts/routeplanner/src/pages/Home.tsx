@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useUser, useClerk } from "@clerk/react";
 import { 
   Download, 
@@ -26,7 +27,8 @@ import {
   Unlock,
   Trophy,
   Clock,
-  Gauge
+  Gauge,
+  Users
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -43,6 +45,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useMunicipality } from "@/hooks/use-municipality";
+import { useAccessStatus } from "@/hooks/use-access-status";
 import {
   useGetNetworkStatus,
   getGetNetworkStatusQueryKey,
@@ -118,8 +121,13 @@ export default function Home() {
 
   const { toast } = useToast();
   const { lang, setLang, t } = useI18n();
+  const [, setLocation] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
+  const { isApproved, isPending, isRejected, isOwner } = useAccessStatus();
+  // Signed-in but not yet approved: map stays browsable, but Save route and
+  // Start ride are gated (the server also enforces this with a 403).
+  const writeBlocked = isPending || isRejected;
 
   const {
     canRide,
@@ -190,7 +198,7 @@ export default function Home() {
     }
   };
 
-  const canSave = !!routePlan && selectedNodes.length >= 2;
+  const canSave = !!routePlan && selectedNodes.length >= 2 && isApproved;
 
   const submitSaveRoute = () => {
     const name = routeName.trim();
@@ -323,7 +331,32 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          
+
+          {isPending && (
+            <Alert>
+              <Lock className="h-4 w-4" />
+              <AlertTitle>{t("access.pendingTitle")}</AlertTitle>
+              <AlertDescription>{t("access.pendingDesc")}</AlertDescription>
+            </Alert>
+          )}
+          {isRejected && (
+            <Alert variant="destructive">
+              <Lock className="h-4 w-4" />
+              <AlertTitle>{t("access.rejectedTitle")}</AlertTitle>
+              <AlertDescription>{t("access.rejectedDesc")}</AlertDescription>
+            </Alert>
+          )}
+          {isOwner && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() => setLocation("/admin")}
+            >
+              <Users className="mr-2 h-4 w-4" /> {t("access.adminLink")}
+            </Button>
+          )}
+
           {/* Quick Jump */}
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
@@ -558,7 +591,7 @@ export default function Home() {
                         size="sm"
                         variant="secondary"
                         className="w-full"
-                        disabled={!canRide}
+                        disabled={!canRide || writeBlocked}
                         onClick={startRide}
                       >
                         <Play className="mr-2 h-4 w-4" /> {t("ride.start")}

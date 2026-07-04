@@ -25,6 +25,8 @@ vi.mock("@workspace/api-client-react", () => ({
   useSaveVisitedSegments: () => ({ mutate: vi.fn() }),
   useListVisitedSegments: () => ({ data: [] }),
   getListVisitedSegmentsQueryKey: () => ["listVisitedSegments"],
+  useGetMyAccess: () => ({ data: { status: "approved", isOwner: false } }),
+  getGetMyAccessQueryKey: () => ["getMyAccess"],
 }));
 
 vi.mock("@/lib/localRoutes", () => ({
@@ -136,7 +138,6 @@ describe("ride vs planning UI split", () => {
     await act(async () => {
       await Promise.resolve();
     });
-
     // Start the ride; let the async permission + watch chain settle.
     await act(async () => {
       fireEvent.click(screen.getByTestId("do-start"));
@@ -162,7 +163,6 @@ describe("ride vs planning UI split", () => {
     expect(screen.getByTestId("node-chip-63")).toBeTruthy();
     expect(screen.getByTestId("ride-summary-title")).toBeTruthy();
   });
-
   it("ignores a knooppunt tap while riding so it can't mutate the route or abort the ride", async () => {
     apiState.planRoute.mockResolvedValue(makePlan(1300));
     render(<Harness />);

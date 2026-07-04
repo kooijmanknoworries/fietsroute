@@ -197,6 +197,64 @@ export interface SaveVisitedSegmentsResult {
   saved: number;
 }
 
+/**
+ * The signed-in user's access status.
+ */
+export type MyAccessStatus = typeof MyAccessStatus[keyof typeof MyAccessStatus];
+
+
+export const MyAccessStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface MyAccess {
+  /** The signed-in user's access status. */
+  status: MyAccessStatus;
+  /** True if the signed-in user is the fixed owner (admin). */
+  isOwner: boolean;
+}
+
+export type UserAccessStatus = typeof UserAccessStatus[keyof typeof UserAccessStatus];
+
+
+export const UserAccessStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface UserAccess {
+  /** The Clerk user id. */
+  userId: string;
+  /**
+     * The user's email, read from Clerk, or null if unknown.
+     * @nullable
+     */
+  email: string | null;
+  status: UserAccessStatus;
+  /** When the user first signed in. */
+  createdAt: string;
+}
+
+/**
+ * The new access status to set for the user.
+ */
+export type SetUserAccessRequestStatus = typeof SetUserAccessRequestStatus[keyof typeof SetUserAccessRequestStatus];
+
+
+export const SetUserAccessRequestStatus = {
+  pending: 'pending',
+  approved: 'approved',
+  rejected: 'rejected',
+} as const;
+
+export interface SetUserAccessRequest {
+  /** The new access status to set for the user. */
+  status: SetUserAccessRequestStatus;
+}
+
 export interface Region {
   id: string;
   name: string;

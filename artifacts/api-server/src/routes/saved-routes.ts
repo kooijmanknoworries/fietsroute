@@ -11,6 +11,7 @@ import {
   ClaimSavedRoutesResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/requireAuth";
+import { requireApproved } from "../lib/access";
 
 const router: IRouter = Router();
 
@@ -47,7 +48,7 @@ router.get("/routes", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.post("/routes", requireAuth, async (req, res): Promise<void> => {
+router.post("/routes", requireAuth, requireApproved, async (req, res): Promise<void> => {
   const ownerKey = getAuth(req).userId!;
 
   const parsed = SaveRouteBody.safeParse(req.body);
@@ -94,7 +95,7 @@ router.post("/routes", requireAuth, async (req, res): Promise<void> => {
 // routes are not lost. The anonymous key is a UUID and never a Clerk user id
 // (which are prefixed `user_`); rejecting that prefix prevents one account
 // from claiming another account's routes.
-router.post("/routes/claim", requireAuth, async (req, res): Promise<void> => {
+router.post("/routes/claim", requireAuth, requireApproved, async (req, res): Promise<void> => {
   const ownerKey = getAuth(req).userId!;
 
   const parsed = ClaimSavedRoutesBody.safeParse(req.body);
@@ -164,7 +165,7 @@ router.get("/routes/:id", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.patch("/routes/:id", requireAuth, async (req, res): Promise<void> => {
+router.patch("/routes/:id", requireAuth, requireApproved, async (req, res): Promise<void> => {
   const ownerKey = getAuth(req).userId!;
   const routeId = String(req.params.id);
 
@@ -212,7 +213,7 @@ router.patch("/routes/:id", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/routes/:id", requireAuth, async (req, res): Promise<void> => {
+router.delete("/routes/:id", requireAuth, requireApproved, async (req, res): Promise<void> => {
   const ownerKey = getAuth(req).userId!;
   const routeId = String(req.params.id);
 

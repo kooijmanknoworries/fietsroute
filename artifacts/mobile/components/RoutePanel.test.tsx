@@ -25,6 +25,8 @@ vi.mock("@workspace/api-client-react", () => ({
   useSaveVisitedSegments: () => ({ mutate: vi.fn() }),
   useListVisitedSegments: () => ({ data: [] }),
   getListVisitedSegmentsQueryKey: () => ["listVisitedSegments"],
+  useGetMyAccess: () => ({ data: { status: "approved", isOwner: false } }),
+  getGetMyAccessQueryKey: () => ["getMyAccess"],
 }));
 
 vi.mock("@/lib/localRoutes", () => ({

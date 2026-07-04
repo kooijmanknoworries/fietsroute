@@ -22,3 +22,4 @@ export * from "./overpassCache";
 export * from "./networkDataset";
 export * from "./saved-routes";
 export * from "./visited-segments";
+export * from "./user-access";

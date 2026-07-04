@@ -24,6 +24,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import AdminPage from "@/pages/Admin";
 import { queryClient } from "@/lib/queryClient";
 
 // REQUIRED — copy verbatim. Resolves the key from window.location.hostname so the
@@ -163,6 +164,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomeGate} />
+      <Route path="/admin" component={AdminPage} />
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
       <Route component={NotFound} />

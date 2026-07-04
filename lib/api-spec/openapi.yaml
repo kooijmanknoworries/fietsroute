@@ -18,6 +18,8 @@ tags:
     description: Quick-jump regions
   - name: routes
     description: Saving and reopening planned routes
+  - name: access
+    description: New-user approval gate and owner-only admin queue
 paths:
   /healthz:
     get:
@@ -418,6 +420,112 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /me/access:
+    get:
+      operationId: getMyAccess
+      tags: [access]
+      summary: Get the current user's access status
+      description: >
+        Returns whether the signed-in user is pending, approved, or rejected.
+        Called by the web and mobile clients after sign-in so the UI knows
+        whether to show the waiting-for-approval notice and enable the Save
+        route / Start ride controls. Creates the user's access record on first
+        call (owner email auto-approved, everyone else pending).
+      responses:
+        "200":
+          description: The current user's access status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyAccess"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/users:
+    get:
+      operationId: listUserAccess
+      tags: [access]
+      summary: List all users and their access status (owner only)
+      description: >
+        Returns every known user with their email, status, and sign-up time,
+        most recent first. Restricted to the owner email, verified server-side.
+      responses:
+        "200":
+          description: All users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserAccess"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/users/{id}:
+    patch:
+      operationId: setUserAccess
+      tags: [access]
+      summary: Approve, reject, or remove a user (owner only)
+      description: >
+        Sets a user's access status. Approving instantly unlocks full access;
+        rejecting/removing blocks them and can be undone by approving later.
+        Restricted to the owner email, verified server-side.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The Clerk user id whose status is being changed.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetUserAccessRequest"
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserAccess"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not the owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -783,6 +891,49 @@ components:
           description: How many new segments were added to the history.
       required:
         - saved
+    MyAccess:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: The signed-in user's access status.
+        isOwner:
+          type: boolean
+          description: True if the signed-in user is the fixed owner (admin).
+      required:
+        - status
+        - isOwner
+    UserAccess:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: The Clerk user id.
+        email:
+          type: [string, "null"]
+          description: The user's email, read from Clerk, or null if unknown.
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+          description: When the user first signed in.
+      required:
+        - userId
+        - email
+        - status
+        - createdAt
+    SetUserAccessRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+          description: The new access status to set for the user.
+      required:
+        - status
     Region:
       type: object
       properties:

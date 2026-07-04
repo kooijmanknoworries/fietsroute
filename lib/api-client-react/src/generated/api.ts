@@ -29,6 +29,7 @@ import type {
   HealthStatus,
   LfRoutesData,
   MunicipalityResult,
+  MyAccess,
   NetworkData,
   NetworkDatasetStatus,
   Region,
@@ -39,7 +40,9 @@ import type {
   SaveVisitedSegmentsResult,
   SavedRoute,
   SavedRouteSummary,
+  SetUserAccessRequest,
   UpdateSavedRouteRequest,
+  UserAccess,
   VisitedSegment
 } from './api.schemas';
 
@@ -1214,5 +1217,237 @@ export const useSaveVisitedSegments = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSaveVisitedSegmentsMutationOptions(options));
+    }
+
+export const getGetMyAccessUrl = () => {
+
+
+
+
+  return `/api/me/access`
+}
+
+/**
+ * Returns whether the signed-in user is pending, approved, or rejected. Called by the web and mobile clients after sign-in so the UI knows whether to show the waiting-for-approval notice and enable the Save route / Start ride controls. Creates the user's access record on first call (owner email auto-approved, everyone else pending).
+
+ * @summary Get the current user's access status
+ */
+export const getMyAccess = async ( options?: RequestInit): Promise<MyAccess> => {
+
+  return customFetch<MyAccess>(getGetMyAccessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyAccessQueryKey = () => {
+    return [
+    `/api/me/access`
+    ] as const;
+    }
+
+
+export const getGetMyAccessQueryOptions = <TData = Awaited<ReturnType<typeof getMyAccess>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyAccessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyAccess>>> = ({ signal }) => getMyAccess({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyAccessQueryResult = NonNullable<Awaited<ReturnType<typeof getMyAccess>>>
+export type GetMyAccessQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get the current user's access status
+ */
+
+export function useGetMyAccess<TData = Awaited<ReturnType<typeof getMyAccess>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyAccessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListUserAccessUrl = () => {
+
+
+
+
+  return `/api/admin/users`
+}
+
+/**
+ * Returns every known user with their email, status, and sign-up time, most recent first. Restricted to the owner email, verified server-side.
+
+ * @summary List all users and their access status (owner only)
+ */
+export const listUserAccess = async ( options?: RequestInit): Promise<UserAccess[]> => {
+
+  return customFetch<UserAccess[]>(getListUserAccessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListUserAccessQueryKey = () => {
+    return [
+    `/api/admin/users`
+    ] as const;
+    }
+
+
+export const getListUserAccessQueryOptions = <TData = Awaited<ReturnType<typeof listUserAccess>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUserAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListUserAccessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listUserAccess>>> = ({ signal }) => listUserAccess({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listUserAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListUserAccessQueryResult = NonNullable<Awaited<ReturnType<typeof listUserAccess>>>
+export type ListUserAccessQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List all users and their access status (owner only)
+ */
+
+export function useListUserAccess<TData = Awaited<ReturnType<typeof listUserAccess>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listUserAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListUserAccessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSetUserAccessUrl = (id: string,) => {
+
+
+
+
+  return `/api/admin/users/${id}`
+}
+
+/**
+ * Sets a user's access status. Approving instantly unlocks full access; rejecting/removing blocks them and can be undone by approving later. Restricted to the owner email, verified server-side.
+
+ * @summary Approve, reject, or remove a user (owner only)
+ */
+export const setUserAccess = async (id: string,
+    setUserAccessRequest: SetUserAccessRequest, options?: RequestInit): Promise<UserAccess> => {
+
+  return customFetch<UserAccess>(getSetUserAccessUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      setUserAccessRequest,)
+  }
+);}
+
+
+
+
+export const getSetUserAccessMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setUserAccess>>, TError,{id: string;data: BodyType<SetUserAccessRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setUserAccess>>, TError,{id: string;data: BodyType<SetUserAccessRequest>}, TContext> => {
+
+const mutationKey = ['setUserAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setUserAccess>>, {id: string;data: BodyType<SetUserAccessRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setUserAccess(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetUserAccessMutationResult = NonNullable<Awaited<ReturnType<typeof setUserAccess>>>
+    export type SetUserAccessMutationBody = BodyType<SetUserAccessRequest>
+    export type SetUserAccessMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Approve, reject, or remove a user (owner only)
+ */
+export const useSetUserAccess = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setUserAccess>>, TError,{id: string;data: BodyType<SetUserAccessRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setUserAccess>>,
+        TError,
+        {id: string;data: BodyType<SetUserAccessRequest>},
+        TContext
+      > => {
+      return useMutation(getSetUserAccessMutationOptions(options));
     }
 
