@@ -1,6 +1,6 @@
 - [Overpass API usage](overpass-api.md) — Overpass needs a descriptive User-Agent header or returns 406; guard bbox size to avoid huge/slow queries.
 - [Nominatim geocoding](nominatim-geocode.md) — geocoding place names needs a descriptive User-Agent + 1 req/s (debounce+cache); fit map to result boundingbox [s,n,w,e].
-- [MapLibre GL WebGL](maplibre-webgl.md) — v4 dropped `maplibregl.supported`; wrap Map ctor in try/catch; headless screenshot env has no WebGL but real browsers do.
+- [MapLibre GL WebGL](maplibre-webgl.md) — v4 dropped `maplibregl.supported`; built-in test browsers lack WebGL, but nix chromium + SwiftShader + puppeteer renders the map for real visual checks.
 - [Overpass persistent cache](overpass-persistent-cache.md) — Overpass results cached in Postgres (`overpass_cache`) with 7-day TTL behind an in-memory L1; cache lives in `fetchOverpass`.
 - [NL+BE network preload](network-dataset-preload.md) — full rcn network preloaded into `network_nodes`/`network_segments`; serve prefers dataset, falls back to live Overpass when empty; `DISABLE_NETWORK_PRELOAD` opts out.
 - [Geocode persistent cache](geocode-persistent-cache.md) — municipality searches cached in Postgres (`geocode_cache`, 24h TTL) behind in-memory L1; mirrors overpass; route param is `q`.
