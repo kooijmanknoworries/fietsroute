@@ -1,4 +1,4 @@
-import { Router, type IRouter, type RequestHandler } from "express";
+import { Router, type IRouter } from "express";
 import { and, desc, eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { db, savedRoutesTable } from "@workspace/db";
@@ -10,19 +10,14 @@ import {
   ClaimSavedRoutesBody,
   ClaimSavedRoutesResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-// Scopes saved routes to the authenticated Clerk user so they follow the user
-// across browsers and devices. The user id is stored in the existing
-// `owner_key` column.
-const requireAuth: RequestHandler = (req, res, next) => {
-  if (!getAuth(req)?.userId) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  next();
-};
+// Saved routes are scoped to the authenticated Clerk user so they follow the
+// user across browsers and devices. The user id is stored in the existing
+// `owner_key` column. `requireAuth` guarantees `getAuth(req).userId` is set on
+// every handler below (also enforced globally in routes/index.ts).
 
 router.get("/routes", requireAuth, async (req, res): Promise<void> => {
   const ownerKey = getAuth(req).userId!;

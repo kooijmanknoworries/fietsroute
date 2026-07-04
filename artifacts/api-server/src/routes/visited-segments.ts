@@ -1,4 +1,4 @@
-import { Router, type IRouter, type RequestHandler } from "express";
+import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { getAuth } from "@clerk/express";
 import { db, visitedSegmentsTable } from "@workspace/db";
@@ -7,19 +7,15 @@ import {
   ListVisitedSegmentsResponse,
   SaveVisitedSegmentsResponse,
 } from "@workspace/api-zod";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
 // Visited segments are the network legs a rider has completed. They are scoped
 // to the authenticated Clerk user via the `owner_key` column, mirroring saved
 // routes, so the history follows the rider across browsers and devices.
-const requireAuth: RequestHandler = (req, res, next) => {
-  if (!getAuth(req)?.userId) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  next();
-};
+// `requireAuth` guarantees `getAuth(req).userId` is set on every handler below
+// (also enforced globally in routes/index.ts).
 
 router.get(
   "/visited-segments",
