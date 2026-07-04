@@ -11,7 +11,7 @@ import MapView, { Marker, Polyline, UrlTile, Region, PROVIDER_DEFAULT } from "re
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
-import { getNetwork } from "@workspace/api-client-react";
+import { getNetwork, MunicipalityResult } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useRoutePlanner, NetworkNode } from "@/context/RoutePlannerContext";
 import RoutePanel from "@/components/RoutePanel";
@@ -89,6 +89,21 @@ export default function MapScreen() {
         longitude: region.lon,
         latitudeDelta: delta,
         longitudeDelta: delta,
+      },
+      600
+    );
+  }, []);
+
+  const handleSelectMunicipality = useCallback((m: MunicipalityResult) => {
+    const { south, north, west, east } = m.boundingBox;
+    const latitudeDelta = Math.max((north - south) * 1.3, 0.02);
+    const longitudeDelta = Math.max((east - west) * 1.3, 0.02);
+    mapRef.current?.animateToRegion(
+      {
+        latitude: (north + south) / 2,
+        longitude: (east + west) / 2,
+        latitudeDelta,
+        longitudeDelta,
       },
       600
     );
@@ -187,7 +202,10 @@ export default function MapScreen() {
         ))}
       </MapView>
 
-      <RegionPicker onSelectRegion={handleSelectRegion} />
+      <RegionPicker
+        onSelectRegion={handleSelectRegion}
+        onSelectMunicipality={handleSelectMunicipality}
+      />
 
       {networkLoading && (
         <View style={[styles.loadingIndicator, { top: topPad + 76, right: 16 }]}>
