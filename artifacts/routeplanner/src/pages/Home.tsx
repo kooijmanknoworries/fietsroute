@@ -516,6 +516,15 @@ export default function Home() {
                 <Navigation className="h-4 w-4" /> {t("network.noNodes")}
               </div>
             )}
+            {!isNetworkLoading && !networkData?.truncated && networkData?.nodes && networkData.nodes.length > 0 && (
+              <div
+                className="text-sm text-muted-foreground flex items-center gap-2"
+                data-testid="network-node-count"
+              >
+                <Navigation className="h-4 w-4" />{" "}
+                {t("network.nodesLoaded", { count: networkData.nodes.length })}
+              </div>
+            )}
           </div>
 
           {/* Planning Status */}

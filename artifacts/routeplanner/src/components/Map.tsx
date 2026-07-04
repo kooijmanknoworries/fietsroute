@@ -382,6 +382,29 @@ export default function Map({
       });
     } catch {
       setMapError(true);
+      // The map canvas needs WebGL, but the rest of the planner (the
+      // /api/network fetch, sidebar states, saved routes) does not. Report the
+      // initial viewport's bbox anyway so network data still loads — the
+      // sidebar can show what was found, and end-to-end tests in WebGL-less
+      // browsers can still catch auth regressions that would blank the map.
+      const fb = initialBounds ?? {
+        west: UTRECHT.lon - 0.15,
+        east: UTRECHT.lon + 0.15,
+        south: UTRECHT.lat - 0.1,
+        north: UTRECHT.lat + 0.1,
+      };
+      // Same 0.1° tile-grid snapping as updateBbox below, so the fallback
+      // request hits the identical server-side cache tiles.
+      const TILE_SIZE_DEG = 0.1;
+      const snap = (v: number, mode: "floor" | "ceil") => {
+        const tiles = v / TILE_SIZE_DEG;
+        const t = mode === "floor" ? Math.floor(tiles) : Math.ceil(tiles);
+        return Number((t * TILE_SIZE_DEG).toFixed(3));
+      };
+      onBboxChangeRef.current(
+        `${snap(fb.west, "floor")},${snap(fb.south, "floor")},${snap(fb.east, "ceil")},${snap(fb.north, "ceil")}`,
+        null,
+      );
       return;
     }
 
