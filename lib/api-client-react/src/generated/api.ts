@@ -30,7 +30,7 @@ import type {
   LfRoutesData,
   MunicipalityResult,
   NetworkData,
-  NetworkStatus,
+  NetworkDatasetStatus,
   Region,
   RoutePlan,
   RouteRequest,
@@ -221,17 +221,17 @@ export const getGetNetworkStatusUrl = () => {
 
 
 
-  return `/api/network-status`
+  return `/api/network/status`
 }
 
 /**
- * Reports whether the locally preloaded NL+BE cycling node network is complete (node count vs the completeness threshold). When it is not ready the server falls back to live OpenStreetMap queries, which can be slow, so the web app can show a friendly "still loading" notice.
+ * Returns the freshness and coverage of the locally preloaded cycling node network dataset: how many nodes/segments are stored, how old the stalest and freshest data are, how much of the import grid is covered, and whether a refresh is currently running. Used to confirm the map data is up to date.
 
- * @summary Readiness of the preloaded cycling network dataset
+ * @summary Get the local node network dataset status
  */
-export const getNetworkStatus = async ( options?: RequestInit): Promise<NetworkStatus> => {
+export const getNetworkStatus = async ( options?: RequestInit): Promise<NetworkDatasetStatus> => {
 
-  return customFetch<NetworkStatus>(getGetNetworkStatusUrl(),
+  return customFetch<NetworkDatasetStatus>(getGetNetworkStatusUrl(),
   {
     ...options,
     method: 'GET'
@@ -246,7 +246,7 @@ export const getNetworkStatus = async ( options?: RequestInit): Promise<NetworkS
 
 export const getGetNetworkStatusQueryKey = () => {
     return [
-    `/api/network-status`
+    `/api/network/status`
     ] as const;
     }
 
@@ -274,7 +274,7 @@ export type GetNetworkStatusQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Readiness of the preloaded cycling network dataset
+ * @summary Get the local node network dataset status
  */
 
 export function useGetNetworkStatus<TData = Awaited<ReturnType<typeof getNetworkStatus>>, TError = ErrorType<unknown>>(

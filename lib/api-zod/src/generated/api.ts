@@ -42,15 +42,22 @@ export const GetNetworkResponse = zod.object({
 
 
 /**
- * Reports whether the locally preloaded NL+BE cycling node network is complete (node count vs the completeness threshold). When it is not ready the server falls back to live OpenStreetMap queries, which can be slow, so the web app can show a friendly "still loading" notice.
+ * Returns the freshness and coverage of the locally preloaded cycling node network dataset: how many nodes/segments are stored, how old the stalest and freshest data are, how much of the import grid is covered, and whether a refresh is currently running. Used to confirm the map data is up to date.
 
- * @summary Readiness of the preloaded cycling network dataset
+ * @summary Get the local node network dataset status
  */
 export const GetNetworkStatusResponse = zod.object({
-  "ready": zod.boolean().describe('True when the preloaded dataset is complete and served fast; false when the server is falling back to slow live OpenStreetMap queries.\n'),
-  "nodeCount": zod.number().describe('Number of numbered nodes currently in the local dataset.'),
-  "threshold": zod.number().describe('Node count at\/above which the dataset is considered ready.')
-})
+  "ready": zod.boolean().describe('True if any dataset rows exist (the map can be served locally).'),
+  "complete": zod.boolean().describe('True if the dataset has enough nodes to be considered fully imported.'),
+  "refreshing": zod.boolean().describe('True if a full dataset import is currently running.'),
+  "nodeCount": zod.number().describe('Number of numbered nodes (knooppunten) stored locally.'),
+  "segmentCount": zod.number().describe('Number of network segments stored locally.'),
+  "chunkCount": zod.number().describe('Total chunks in the NL+BE import grid.'),
+  "importedChunkCount": zod.number().describe('Chunks that currently have a fresh import marker.'),
+  "oldestDataAt": zod.string().nullable().describe('ISO timestamp of the stalest stored node row, or null if empty.'),
+  "newestDataAt": zod.string().nullable().describe('ISO timestamp of the freshest stored node row, or null if empty.'),
+  "oldestDataAgeHours": zod.number().nullable().describe('Age in hours of the stalest stored node row (worst-case staleness), or null if empty.\n')
+}).describe('Freshness and coverage of the locally preloaded cycling node network dataset.\n')
 
 
 /**

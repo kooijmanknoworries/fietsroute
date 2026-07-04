@@ -126,3 +126,32 @@ describe("GET /api/network", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("GET /api/network/status", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("reports dataset freshness and coverage", async () => {
+    const res = await request(buildApp()).get("/api/network/status");
+
+    expect(res.status).toBe(200);
+    // Shape (validated by GetNetworkStatusResponse.parse in the handler).
+    expect(typeof res.body.ready).toBe("boolean");
+    expect(typeof res.body.complete).toBe("boolean");
+    expect(typeof res.body.refreshing).toBe("boolean");
+    expect(typeof res.body.nodeCount).toBe("number");
+    expect(typeof res.body.segmentCount).toBe("number");
+    expect(res.body.chunkCount).toBeGreaterThan(0);
+    expect(typeof res.body.importedChunkCount).toBe("number");
+    // Age fields are either null (empty dataset) or a value of the right type.
+    expect(
+      res.body.oldestDataAt === null ||
+        typeof res.body.oldestDataAt === "string",
+    ).toBe(true);
+    expect(
+      res.body.oldestDataAgeHours === null ||
+        typeof res.body.oldestDataAgeHours === "number",
+    ).toBe(true);
+  });
+});

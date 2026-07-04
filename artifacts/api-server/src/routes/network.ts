@@ -52,9 +52,16 @@ router.get("/network", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/network-status", async (_req, res): Promise<void> => {
-  const status = await getDatasetStatus();
-  res.json(GetNetworkStatusResponse.parse(status));
+router.get("/network/status", async (req, res): Promise<void> => {
+  try {
+    const status = await getDatasetStatus();
+    res.json(GetNetworkStatusResponse.parse(status));
+  } catch (err) {
+    req.log.error({ err }, "Failed to read network dataset status");
+    res
+      .status(502)
+      .json({ message: "Failed to read network dataset status" });
+  }
 });
 
 export default router;

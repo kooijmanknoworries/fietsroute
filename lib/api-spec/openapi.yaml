@@ -67,23 +67,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
-  /network-status:
+  /network/status:
     get:
       operationId: getNetworkStatus
       tags: [network]
-      summary: Readiness of the preloaded cycling network dataset
+      summary: Get the local node network dataset status
       description: >
-        Reports whether the locally preloaded NL+BE cycling node network is
-        complete (node count vs the completeness threshold). When it is not
-        ready the server falls back to live OpenStreetMap queries, which can be
-        slow, so the web app can show a friendly "still loading" notice.
+        Returns the freshness and coverage of the locally preloaded cycling
+        node network dataset: how many nodes/segments are stored, how old the
+        stalest and freshest data are, how much of the import grid is covered,
+        and whether a refresh is currently running. Used to confirm the map
+        data is up to date.
       responses:
         "200":
-          description: Dataset readiness
+          description: Dataset status
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NetworkStatus"
+                $ref: "#/components/schemas/NetworkDatasetStatus"
   /lf-routes:
     get:
       operationId: getLfRoutes
@@ -429,24 +430,55 @@ components:
         - nodes
         - segments
         - truncated
-    NetworkStatus:
+    NetworkDatasetStatus:
       type: object
+      description: >
+        Freshness and coverage of the locally preloaded cycling node network
+        dataset.
       properties:
         ready:
           type: boolean
-          description: >
-            True when the preloaded dataset is complete and served fast; false
-            when the server is falling back to slow live OpenStreetMap queries.
+          description: True if any dataset rows exist (the map can be served locally).
+        complete:
+          type: boolean
+          description: True if the dataset has enough nodes to be considered fully imported.
+        refreshing:
+          type: boolean
+          description: True if a full dataset import is currently running.
         nodeCount:
-          type: number
-          description: Number of numbered nodes currently in the local dataset.
-        threshold:
-          type: number
-          description: Node count at/above which the dataset is considered ready.
+          type: integer
+          description: Number of numbered nodes (knooppunten) stored locally.
+        segmentCount:
+          type: integer
+          description: Number of network segments stored locally.
+        chunkCount:
+          type: integer
+          description: Total chunks in the NL+BE import grid.
+        importedChunkCount:
+          type: integer
+          description: Chunks that currently have a fresh import marker.
+        oldestDataAt:
+          type: [string, "null"]
+          description: ISO timestamp of the stalest stored node row, or null if empty.
+        newestDataAt:
+          type: [string, "null"]
+          description: ISO timestamp of the freshest stored node row, or null if empty.
+        oldestDataAgeHours:
+          type: [number, "null"]
+          description: >
+            Age in hours of the stalest stored node row (worst-case staleness),
+            or null if empty.
       required:
         - ready
+        - complete
+        - refreshing
         - nodeCount
-        - threshold
+        - segmentCount
+        - chunkCount
+        - importedChunkCount
+        - oldestDataAt
+        - newestDataAt
+        - oldestDataAgeHours
     LfRoute:
       type: object
       description: >

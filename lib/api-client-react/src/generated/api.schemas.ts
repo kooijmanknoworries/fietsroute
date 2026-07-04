@@ -41,14 +41,41 @@ export interface NetworkData {
   truncated: boolean;
 }
 
-export interface NetworkStatus {
-  /** True when the preloaded dataset is complete and served fast; false when the server is falling back to slow live OpenStreetMap queries.
-   */
+/**
+ * Freshness and coverage of the locally preloaded cycling node network dataset.
+
+ */
+export interface NetworkDatasetStatus {
+  /** True if any dataset rows exist (the map can be served locally). */
   ready: boolean;
-  /** Number of numbered nodes currently in the local dataset. */
+  /** True if the dataset has enough nodes to be considered fully imported. */
+  complete: boolean;
+  /** True if a full dataset import is currently running. */
+  refreshing: boolean;
+  /** Number of numbered nodes (knooppunten) stored locally. */
   nodeCount: number;
-  /** Node count at/above which the dataset is considered ready. */
-  threshold: number;
+  /** Number of network segments stored locally. */
+  segmentCount: number;
+  /** Total chunks in the NL+BE import grid. */
+  chunkCount: number;
+  /** Chunks that currently have a fresh import marker. */
+  importedChunkCount: number;
+  /**
+     * ISO timestamp of the stalest stored node row, or null if empty.
+     * @nullable
+     */
+  oldestDataAt: string | null;
+  /**
+     * ISO timestamp of the freshest stored node row, or null if empty.
+     * @nullable
+     */
+  newestDataAt: string | null;
+  /**
+     * Age in hours of the stalest stored node row (worst-case staleness), or null if empty.
+
+     * @nullable
+     */
+  oldestDataAgeHours: number | null;
 }
 
 /**

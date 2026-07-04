@@ -17,3 +17,4 @@
 - [Dataset routing intermediate nodes](dataset-routing-intermediate-nodes.md) — routing from the preloaded dataset must rebuild un-numbered way nodes from segment node_ids+coordinates or the graph is disconnected.
 - [Overpass endpoint reliability](overpass-endpoints-reliability.md) — mail.ru mirror works, .fr is 403 whitelist-only; client timeout must exceed query `[timeout:N]`; serialize all requests in one slot.
 - [Resumable network import](resumable-network-import.md) — chunks marked `import-chunk:` in `overpass_cache`; prune only on clean runs; 10-min loop self-heals incomplete datasets.
+- [Network dataset freshness](network-dataset-freshness.md) — rolling refresh re-imports oldest chunk on a STALE_MS/chunk cadence; `GET /api/network/status` shows age/coverage; 0 markers ≠ empty dataset.

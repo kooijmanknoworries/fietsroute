@@ -57,6 +57,26 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // within an hour rather than waiting for the next full pass.
 const RETRY_FAILED_MS = 10 * 60 * 1000;
 
+// Total number of chunks in the NL+BE grid. Precomputed so the rolling-refresh
+// cadence can be derived from it without recomputing the grid every tick.
+const CHUNK_COUNT = chunkBboxes().length;
+
+// Rolling refresh: rather than let the whole dataset go stale and then re-import
+// everything at once, continuously re-import the single oldest chunk. Spread
+// across the grid this refreshes every chunk within roughly STALE_MS while only
+// ever running one small Overpass query at a time. The interval is derived so
+// that (interval * CHUNK_COUNT) ≈ STALE_MS, with a floor so it never hammers
+// Overpass on tiny grids.
+const ROLLING_REFRESH_INTERVAL_MS = Math.max(
+  5 * 60 * 1000,
+  Math.floor(STALE_MS / CHUNK_COUNT),
+);
+
+// A chunk is only picked for a rolling refresh once its data is older than this.
+// Without a floor, a freshly imported dataset would still churn one chunk every
+// interval even though nothing is close to stale yet.
+const ROLLING_REFRESH_MIN_AGE_MS = 12 * 60 * 60 * 1000;
+
 // Cache the (cheap) readiness probe so we don't hit the DB on every request.
 const READY_CACHE_MS = 30 * 1000;
 
@@ -105,6 +125,24 @@ async function markChunkFresh(chunk: Bbox): Promise<void> {
     });
 }
 
+// Read every import-chunk marker and return a map of chunkKey -> createdAt, so
+// the rolling refresh and status report can reason about per-chunk data age
+// without a query per chunk.
+async function getChunkMarkers(): Promise<Map<string, Date>> {
+  const rows = await db
+    .select({
+      key: overpassCacheTable.key,
+      createdAt: overpassCacheTable.createdAt,
+    })
+    .from(overpassCacheTable)
+    .where(like(overpassCacheTable.key, `${CHUNK_MARKER_PREFIX}%`));
+  const map = new Map<string, Date>();
+  for (const r of rows) {
+    map.set(r.key.slice(CHUNK_MARKER_PREFIX.length), r.createdAt);
+  }
+  return map;
+}
+
 function round(n: number): number {
   return Number(n.toFixed(4));
 }
@@ -148,49 +186,6 @@ export async function isDatasetReady(): Promise<boolean> {
   } catch (err) {
     logger.warn({ err }, "Dataset readiness check failed");
     return false;
-  }
-}
-
-export interface DatasetStatus {
-  // True when the preloaded dataset is complete enough to serve the whole
-  // NL+BE region quickly. When false the server is likely falling back to
-  // slow live Overpass queries for some viewports.
-  ready: boolean;
-  // Number of numbered nodes currently in the local dataset.
-  nodeCount: number;
-  // Node count at/above which the dataset is treated as ready.
-  threshold: number;
-}
-
-let statusCache: { status: DatasetStatus; at: number } | null = null;
-
-// Report the dataset's readiness (node count vs the completeness threshold) so
-// the web app can show a "still loading" notice while the import is running or
-// after a DB reset. Cached briefly like the readiness probe.
-export async function getDatasetStatus(): Promise<DatasetStatus> {
-  const now = Date.now();
-  if (statusCache && now - statusCache.at < READY_CACHE_MS) {
-    return statusCache.status;
-  }
-  try {
-    const rows = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(networkNodesTable);
-    const nodeCount = Number(rows[0]?.count ?? 0);
-    const status: DatasetStatus = {
-      ready: nodeCount >= DATASET_INCOMPLETE_THRESHOLD,
-      nodeCount,
-      threshold: DATASET_INCOMPLETE_THRESHOLD,
-    };
-    statusCache = { status, at: now };
-    return status;
-  } catch (err) {
-    logger.warn({ err }, "Dataset status check failed");
-    return {
-      ready: false,
-      nodeCount: 0,
-      threshold: DATASET_INCOMPLETE_THRESHOLD,
-    };
   }
 }
 
@@ -571,6 +566,7 @@ export async function importNetworkDataset(): Promise<void> {
     { imported, skipped, failed, nodeCount, segCount },
     "Network dataset import complete",
   );
+  await logDatasetStatus("import-complete");
 }
 
 // Retry only the chunks that failed during the last import pass. Runs on a
@@ -610,6 +606,76 @@ async function retryFailedChunks(): Promise<void> {
   }
 }
 
+// Rolling refresh: re-import the single oldest chunk so that, over time, every
+// part of the dataset is refreshed on a rolling window without a heavy full
+// re-import. Skips entirely while a full import/retry is running (so it never
+// competes for the single Overpass slot) and while the dataset is still being
+// built (the full import + retry loops own that phase). Only touches a chunk
+// once its data is older than ROLLING_REFRESH_MIN_AGE_MS.
+async function refreshOldestChunk(): Promise<void> {
+  if (importing) return;
+
+  try {
+    // Don't roll while the dataset is still incomplete — the full import and
+    // failed-chunk retry loops are responsible for getting it whole first.
+    if (await isDatasetIncomplete()) return;
+
+    const markers = await getChunkMarkers();
+    const now = Date.now();
+
+    // Pick the oldest chunk. A chunk with no marker (never imported, or its
+    // marker was swept) is treated as maximally old so it gets refreshed first.
+    let oldest: Bbox | null = null;
+    let oldestAge = -1;
+    for (const chunk of chunkBboxes()) {
+      const marker = markers.get(chunkKey(chunk));
+      const age = marker ? now - marker.getTime() : Number.MAX_SAFE_INTEGER;
+      if (age > oldestAge) {
+        oldestAge = age;
+        oldest = chunk;
+      }
+    }
+
+    if (!oldest || oldestAge < ROLLING_REFRESH_MIN_AGE_MS) {
+      logger.debug(
+        { oldestAgeHours: Math.round(oldestAge / 3_600_000) },
+        "Rolling refresh: no chunk old enough yet",
+      );
+      return;
+    }
+
+    const target = oldest;
+    logger.info(
+      {
+        chunk: target,
+        ageHours:
+          oldestAge === Number.MAX_SAFE_INTEGER
+            ? null
+            : Math.round(oldestAge / 3_600_000),
+      },
+      "Rolling refresh: re-importing oldest network chunk",
+    );
+    const refreshStart = new Date();
+    try {
+      const result = await importChunk(target, refreshStart);
+      logger.info(
+        { chunk: target, nodes: result.nodes, segs: result.segs },
+        "Rolling refresh: chunk re-imported",
+      );
+      readyCache = null;
+    } catch (err) {
+      // Record it so the fast failed-chunk retry loop picks it up too.
+      failedChunks.set(chunkKey(target), target);
+      logger.warn(
+        { err, chunk: target },
+        "Rolling refresh: chunk re-import failed",
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "Rolling refresh check failed");
+  }
+}
+
 async function isDatasetStale(): Promise<boolean> {
   try {
     const rows = await db
@@ -640,6 +706,90 @@ async function isDatasetIncomplete(): Promise<boolean> {
     logger.warn({ err }, "Dataset completeness check failed");
     return false;
   }
+}
+
+// A point-in-time snapshot of the local dataset: how big it is, how old its
+// freshest and stalest data are, and how much of the grid has been imported.
+// Powers the /network/status health field and the periodic status log so the
+// dataset's age and coverage are observable at a glance.
+export interface DatasetStatus {
+  // Whether any rows exist (dataset can serve at all).
+  ready: boolean;
+  // Whether the dataset has enough nodes to be considered fully imported.
+  complete: boolean;
+  // Whether a full import is currently running.
+  refreshing: boolean;
+  nodeCount: number;
+  segmentCount: number;
+  // Total chunks in the NL+BE grid and how many currently have a fresh marker.
+  chunkCount: number;
+  importedChunkCount: number;
+  // ISO timestamps of the stalest and freshest node rows, or null if empty.
+  oldestDataAt: string | null;
+  newestDataAt: string | null;
+  // Age of the stalest node row in hours, or null if empty. This is the key
+  // freshness signal: it's the worst-case staleness anywhere in the dataset.
+  oldestDataAgeHours: number | null;
+}
+
+export async function getDatasetStatus(): Promise<DatasetStatus> {
+  let nodeCount = 0;
+  let segmentCount = 0;
+  let oldest: Date | null = null;
+  let newest: Date | null = null;
+  let importedChunkCount = 0;
+
+  try {
+    const nodeAgg = await db
+      .select({
+        count: sql<number>`count(*)`,
+        min: sql<string | null>`min(${networkNodesTable.updatedAt})`,
+        max: sql<string | null>`max(${networkNodesTable.updatedAt})`,
+      })
+      .from(networkNodesTable);
+    nodeCount = Number(nodeAgg[0]?.count ?? 0);
+    oldest = nodeAgg[0]?.min ? new Date(nodeAgg[0].min) : null;
+    newest = nodeAgg[0]?.max ? new Date(nodeAgg[0].max) : null;
+
+    const segAgg = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(networkSegmentsTable);
+    segmentCount = Number(segAgg[0]?.count ?? 0);
+
+    const now = Date.now();
+    const markers = await getChunkMarkers();
+    for (const createdAt of markers.values()) {
+      if (createdAt.getTime() > now - STALE_MS) importedChunkCount++;
+    }
+  } catch (err) {
+    logger.warn({ err }, "Dataset status query failed");
+  }
+
+  const oldestDataAgeHours =
+    oldest !== null
+      ? Math.round(((Date.now() - oldest.getTime()) / 3_600_000) * 10) / 10
+      : null;
+
+  return {
+    ready: nodeCount > 0,
+    complete: nodeCount >= DATASET_INCOMPLETE_THRESHOLD,
+    refreshing: importing,
+    nodeCount,
+    segmentCount,
+    chunkCount: CHUNK_COUNT,
+    importedChunkCount,
+    oldestDataAt: oldest?.toISOString() ?? null,
+    newestDataAt: newest?.toISOString() ?? null,
+    oldestDataAgeHours,
+  };
+}
+
+// Emit a single log line summarizing dataset age and coverage. Called after
+// imports and rolling refreshes so the dataset's freshness is visible in logs
+// even without hitting the status endpoint.
+async function logDatasetStatus(context: string): Promise<void> {
+  const status = await getDatasetStatus();
+  logger.info({ ...status, context }, "Network dataset status");
 }
 
 async function maybeImport(): Promise<void> {
@@ -686,4 +836,22 @@ export function startNetworkPreload(): void {
     void retryFailedChunks();
   }, RETRY_FAILED_MS);
   retry.unref();
+
+  // Rolling refresh: continuously re-import the oldest chunk so the dataset
+  // never drifts far from OSM without a heavy full re-import. Runs on its own
+  // cadence derived from the grid size and STALE_MS.
+  const rolling = setInterval(() => {
+    void refreshOldestChunk();
+  }, ROLLING_REFRESH_INTERVAL_MS);
+  rolling.unref();
+
+  logger.info(
+    {
+      rollingRefreshIntervalMin: Math.round(
+        ROLLING_REFRESH_INTERVAL_MS / 60_000,
+      ),
+      chunkCount: CHUNK_COUNT,
+    },
+    "Network dataset rolling refresh scheduled",
+  );
 }
