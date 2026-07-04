@@ -3,7 +3,7 @@ import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/re
 import { Alert } from "react-native";
 import type { SavedRouteSummary } from "@workspace/api-client-react";
 import type { LocalRoute } from "@/lib/localRoutes";
-import SavedRoutesScreen from "./saved";
+import SavedRoutesScreen from "@/app/saved";
 
 // --- Mocks -----------------------------------------------------------------
 

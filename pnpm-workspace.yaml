@@ -158,3 +158,8 @@ overrides:
   # drizzle-kit uses esbuild internally on an older version that's vulnerable, this overrides it
   "@esbuild-kit/esm-loader": "npm:tsx@^4.21.0"
   esbuild: "0.27.3"
+  # Dedupe React types to a single version across all artifacts. The mobile app pins ~19.1.10
+  # while the web artifacts use the catalog ^19.2.0, so two @types/react versions coexisted and
+  # TypeScript saw two unrelated React.Ref types, breaking the deploy typecheck (mockup-sandbox).
+  "@types/react": "^19.2.0"
+  "@types/react-dom": "^19.2.0"
