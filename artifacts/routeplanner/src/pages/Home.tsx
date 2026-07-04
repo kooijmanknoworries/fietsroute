@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
-import { Show, useUser, useClerk } from "@clerk/react";
+import { useUser, useClerk } from "@clerk/react";
 import { 
   Download, 
   Upload, 
@@ -18,7 +17,6 @@ import {
   Star,
   X,
   Pencil,
-  LogIn,
   LogOut,
   Globe,
   Play,
@@ -61,7 +59,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useRoutePlanner } from "@/hooks/use-route-planner";
 import { useRide } from "@/hooks/use-ride";
-import { useClaimAnonymousRoutes } from "@/hooks/use-claim-anonymous-routes";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
 import { useI18n } from "@/lib/i18n";
@@ -107,13 +104,6 @@ export default function Home() {
     removeFavorite,
   } = useMunicipality();
 
-  const {
-    canClaim,
-    claim: claimAnonymousRoutes,
-    dismiss: dismissClaim,
-    isClaiming,
-  } = useClaimAnonymousRoutes();
-
   // Dataset readiness: when the preloaded network isn't complete yet, the API
   // falls back to slow live queries. Poll periodically while it's not ready so
   // the notice disappears automatically once the import finishes.
@@ -128,7 +118,6 @@ export default function Home() {
 
   const { toast } = useToast();
   const { lang, setLang, t } = useI18n();
-  const [, setLocation] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
 
@@ -232,33 +221,6 @@ export default function Home() {
       toast({
         title: t("toast.renameFailed.title"),
         description: err instanceof Error ? err.message : t("toast.renameFailed.desc"),
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleClaimRoutes = async () => {
-    try {
-      const count = await claimAnonymousRoutes();
-      if (count > 0) {
-        toast({
-          title: t("toast.routesImported.title"),
-          description:
-            count === 1
-              ? t("toast.routesImported.descOne")
-              : t("toast.routesImported.descMany", { count }),
-        });
-      } else {
-        toast({
-          title: t("toast.nothingToImport.title"),
-          description: t("toast.nothingToImport.desc"),
-        });
-      }
-    } catch (err) {
-      toast({
-        title: t("toast.importFailed.title"),
-        description:
-          err instanceof Error ? err.message : t("toast.importFailed.desc"),
         variant: "destructive",
       });
     }
@@ -580,26 +542,14 @@ export default function Home() {
                       <span className="text-muted-foreground font-medium">{t("route.totalDistance")}</span>
                       <span className="font-bold text-lg text-foreground">{formatDistance(routePlan.distanceMeters)}</span>
                     </div>
-                    <Show when="signed-in">
-                      <Button
-                        size="sm"
-                        className="w-full"
-                        disabled={!canSave}
-                        onClick={() => setSaveDialogOpen(true)}
-                      >
-                        <Save className="mr-2 h-4 w-4" /> {t("route.saveRoute")}
-                      </Button>
-                    </Show>
-                    <Show when="signed-out">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setLocation("/sign-in")}
-                      >
-                        <LogIn className="mr-2 h-4 w-4" /> {t("route.signInToSave")}
-                      </Button>
-                    </Show>
+                    <Button
+                      size="sm"
+                      className="w-full"
+                      disabled={!canSave}
+                      onClick={() => setSaveDialogOpen(true)}
+                    >
+                      <Save className="mr-2 h-4 w-4" /> {t("route.saveRoute")}
+                    </Button>
 
                     {/* Live ride tracking */}
                     <Separator className="my-1" />
@@ -646,12 +596,6 @@ export default function Home() {
                             {t("ride.waitingForGps")}
                           </div>
                         )}
-                        <Show when="signed-out">
-                          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                            <Lock className="mt-0.5 h-3 w-3 shrink-0" />
-                            {t("ride.signInToSaveHistory")}
-                          </p>
-                        </Show>
                         <Button
                           size="sm"
                           variant="outline"
@@ -675,13 +619,7 @@ export default function Home() {
             <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
               <Bookmark className="h-4 w-4" /> {t("saved.title")}
             </h3>
-            <Show when="signed-out">
-              <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
-                <p>{t("saved.signInPrompt")}</p>
-              </div>
-            </Show>
-            <Show when="signed-in">
-              {isLoadingSavedRoutes ? (
+            {isLoadingSavedRoutes ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" /> {t("saved.loading")}
                 </div>
@@ -738,7 +676,6 @@ export default function Home() {
                   ))}
                 </div>
               )}
-            </Show>
           </div>
 
           <Separator />
@@ -781,26 +718,14 @@ export default function Home() {
         </div>
 
         <div className="p-4 border-t border-border bg-card">
-          <Show when="signed-out">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => setLocation("/sign-in")}
-            >
-              <LogIn className="mr-2 h-4 w-4" /> {t("auth.signIn")}
-            </Button>
-          </Show>
-          <Show when="signed-in">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => signOut({ redirectUrl: basePath || "/" })}
-            >
-              <LogOut className="mr-2 h-4 w-4" /> {t("auth.signOut")}
-            </Button>
-          </Show>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => signOut({ redirectUrl: basePath || "/" })}
+          >
+            <LogOut className="mr-2 h-4 w-4" /> {t("auth.signOut")}
+          </Button>
         </div>
       </div>
 
@@ -987,40 +912,6 @@ export default function Home() {
                 <Pencil className="mr-2 h-4 w-4" />
               )}
               {t("common.rename")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Import-anonymous-routes Dialog (one-time, on first sign-in) */}
-      <Dialog
-        open={canClaim}
-        onOpenChange={(open) => {
-          if (!open && !isClaiming) dismissClaim();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("dialog.import.title")}</DialogTitle>
-            <DialogDescription>
-              {t("dialog.import.desc")}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={dismissClaim}
-              disabled={isClaiming}
-            >
-              {t("dialog.import.notNow")}
-            </Button>
-            <Button onClick={handleClaimRoutes} disabled={isClaiming}>
-              {isClaiming ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              {t("dialog.import.confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -14,7 +14,6 @@ export const DEFAULT_LANG: Lang = "nl";
 
 const en = {
   "app.subtitle": "Plan your cycling adventure in NL/BE",
-  "auth.signIn": "Sign in",
   "auth.signOut": "Sign out",
   "auth.signInTitle": "Welcome back",
   "auth.signInSubtitle": "Sign in to access your saved cycling routes",
@@ -52,7 +51,6 @@ const en = {
   "route.errorTitle": "Routing Error",
   "route.totalDistance": "Total Distance:",
   "route.saveRoute": "Save route",
-  "route.signInToSave": "Sign in to save",
   "route.nodesCount": "{count} nodes",
 
   "ride.start": "Start ride",
@@ -61,7 +59,6 @@ const en = {
   "ride.progress": "{done} of {total} ridden",
   "ride.gpsDenied": "Location access is blocked. Enable location permission for this site to track your ride.",
   "ride.gpsUnavailable": "Can't get your location right now. Recolouring will resume once a GPS signal returns.",
-  "ride.signInToSaveHistory": "Sign in to keep a permanent record of the segments you've ridden.",
   "ride.waitingForGps": "Waiting for GPS signal…",
   "ride.recenter": "Recenter on me",
   "ride.recenterTitle": "Resume following your live position",
@@ -76,7 +73,6 @@ const en = {
   "ride.summary.done": "Done",
 
   "saved.title": "Saved Routes",
-  "saved.signInPrompt": "Sign in to save routes and reach them from any device.",
   "saved.loading": "Loading saved routes...",
   "saved.empty": 'No saved routes yet. Plan a route and tap "Save route" to keep it.',
   "saved.openRoute": "Open route",
@@ -99,11 +95,6 @@ const en = {
   "dialog.rename.title": "Rename route",
   "dialog.rename.desc": "Update the name of your saved route.",
   "dialog.rename.placeholder": "Route name",
-  "dialog.import.title": "Import routes from this device?",
-  "dialog.import.desc":
-    "We found cycling routes you saved on this device before signing in. Import them into your account so you can reach them from anywhere.",
-  "dialog.import.notNow": "Not now",
-  "dialog.import.confirm": "Import routes",
 
   "map.center": "Center",
   "map.centerTitle": "Center on default area",
@@ -136,13 +127,6 @@ const en = {
   "toast.routeRenamed.desc": 'Renamed to "{name}".',
   "toast.renameFailed.title": "Rename failed",
   "toast.renameFailed.desc": "Could not rename the route.",
-  "toast.routesImported.title": "Routes imported",
-  "toast.routesImported.descOne": "1 route saved on this device is now in your account.",
-  "toast.routesImported.descMany": "{count} routes saved on this device are now in your account.",
-  "toast.nothingToImport.title": "Nothing to import",
-  "toast.nothingToImport.desc": "No routes from this device were found.",
-  "toast.importFailed.title": "Import failed",
-  "toast.importFailed.desc": "Could not import your routes.",
   "toast.gpxImportFailed.title": "Couldn't import this file",
   "toast.gpxImportFailed.desc": "No valid track points found in this file.",
 
@@ -155,7 +139,6 @@ export type TranslationKey = keyof typeof en;
 
 const nl: Record<TranslationKey, string> = {
   "app.subtitle": "Plan je fietsavontuur in NL/BE",
-  "auth.signIn": "Inloggen",
   "auth.signOut": "Uitloggen",
   "auth.signInTitle": "Welkom terug",
   "auth.signInSubtitle": "Log in om je opgeslagen fietsroutes te bekijken",
@@ -193,14 +176,12 @@ const nl: Record<TranslationKey, string> = {
   "route.errorTitle": "Routefout",
   "route.totalDistance": "Totale afstand:",
   "route.saveRoute": "Route opslaan",
-  "route.signInToSave": "Log in om op te slaan",
   "ride.start": "Rit starten",
   "ride.stop": "Rit stoppen",
   "ride.riding": "Rit bezig",
   "ride.progress": "{done} van {total} gereden",
   "ride.gpsDenied": "Locatietoegang is geblokkeerd. Sta locatietoegang toe voor deze site om je rit te volgen.",
   "ride.gpsUnavailable": "Je locatie is nu niet beschikbaar. Het herkleuren gaat verder zodra er weer een gps-signaal is.",
-  "ride.signInToSaveHistory": "Log in om een blijvend overzicht van je gereden segmenten te bewaren.",
   "ride.waitingForGps": "Wachten op gps-signaal…",
   "ride.recenter": "Centreer op mij",
   "ride.recenterTitle": "Ga verder met het volgen van je live positie",
@@ -216,7 +197,6 @@ const nl: Record<TranslationKey, string> = {
   "route.nodesCount": "{count} knooppunten",
 
   "saved.title": "Opgeslagen routes",
-  "saved.signInPrompt": "Log in om routes op te slaan en op elk apparaat te bekijken.",
   "saved.loading": "Opgeslagen routes laden...",
   "saved.empty": 'Nog geen opgeslagen routes. Plan een route en tik op "Route opslaan".',
   "saved.openRoute": "Route openen",
@@ -239,11 +219,6 @@ const nl: Record<TranslationKey, string> = {
   "dialog.rename.title": "Route hernoemen",
   "dialog.rename.desc": "Wijzig de naam van je opgeslagen route.",
   "dialog.rename.placeholder": "Routenaam",
-  "dialog.import.title": "Routes van dit apparaat importeren?",
-  "dialog.import.desc":
-    "We vonden fietsroutes die je op dit apparaat hebt opgeslagen voordat je inlogde. Importeer ze in je account zodat je ze overal kunt bekijken.",
-  "dialog.import.notNow": "Niet nu",
-  "dialog.import.confirm": "Routes importeren",
 
   "map.center": "Centreren",
   "map.centerTitle": "Centreren op standaardgebied",
@@ -276,13 +251,6 @@ const nl: Record<TranslationKey, string> = {
   "toast.routeRenamed.desc": 'Hernoemd naar "{name}".',
   "toast.renameFailed.title": "Hernoemen mislukt",
   "toast.renameFailed.desc": "Kon de route niet hernoemen.",
-  "toast.routesImported.title": "Routes geïmporteerd",
-  "toast.routesImported.descOne": "1 route van dit apparaat staat nu in je account.",
-  "toast.routesImported.descMany": "{count} routes van dit apparaat staan nu in je account.",
-  "toast.nothingToImport.title": "Niets te importeren",
-  "toast.nothingToImport.desc": "Geen routes van dit apparaat gevonden.",
-  "toast.importFailed.title": "Importeren mislukt",
-  "toast.importFailed.desc": "Kon je routes niet importeren.",
   "toast.gpxImportFailed.title": "Kon dit bestand niet importeren",
   "toast.gpxImportFailed.desc": "Geen geldige trackpunten in dit bestand gevonden.",
 
