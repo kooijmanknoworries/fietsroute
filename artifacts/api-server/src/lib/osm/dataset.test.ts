@@ -8,6 +8,7 @@ import {
   pool,
 } from "@workspace/db";
 import {
+  filterRoutableNodes,
   getNetworkForRoute,
   getNetworkFromDataset,
   isDatasetReady,
@@ -154,6 +155,43 @@ describe("network dataset", () => {
     }
   });
 
+  it("live Overpass path excludes rcnRef nodes not connected to any way", async () => {
+    // Use a distinct tile (lon 2.x) that doesn't share the in-memory L1 cache
+    // with the adjacent hole-viewport test which uses lon 1.5.
+    const filterBbox: Bbox = {
+      minLon: 2.0,
+      minLat: 41.0,
+      maxLon: 2.05,
+      maxLat: 41.05,
+    };
+    await db
+      .delete(overpassCacheTable)
+      .where(like(overpassCacheTable.key, "2.0%"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          elements: [
+            // node 888001 is in way 888100 → routable, must be returned
+            { type: "node", id: 888001, lat: 41.02, lon: 2.02, tags: { rcn_ref: "88" } },
+            { type: "node", id: 888002, lat: 41.03, lon: 2.03 },
+            { type: "way", id: 888100, nodes: [888001, 888002] },
+            // node 888999 has rcn_ref but is NOT in any way → non-routable, must be absent
+            { type: "node", id: 888999, lat: 41.04, lon: 2.04, tags: { rcn_ref: "99" } },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ) as Response,
+    );
+    try {
+      const data = await getNetworkData(filterBbox);
+      const ids = data.nodes.map((n) => n.id);
+      expect(ids).toContain("888001");
+      expect(ids).not.toContain("888999");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
   it("falls back to live Overpass for an empty (hole) viewport even when ready", async () => {
     // A small viewport in a region with no dataset rows: the dataset is "ready"
     // (rows exist elsewhere) but returns empty, so we must hit live Overpass.
@@ -171,6 +209,9 @@ describe("network dataset", () => {
       .where(or(like(overpassCacheTable.key, "1.4%"), like(overpassCacheTable.key, "1.5%")));
     const liveElements = [
       { type: "node", id: 777001, lat: 40.52, lon: 1.52, tags: { rcn_ref: "77" } },
+      // 777002 is an intermediate (un-numbered) way node needed to make 777001 routable.
+      { type: "node", id: 777002, lat: 40.53, lon: 1.53 },
+      { type: "way", id: 777100, nodes: [777001, 777002] },
     ];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ elements: liveElements }), {
@@ -185,5 +226,58 @@ describe("network dataset", () => {
     } finally {
       fetchSpy.mockRestore();
     }
+  });
+});
+
+describe("filterRoutableNodes", () => {
+  it("keeps nodes whose ID appears in at least one segment's nodeIds", () => {
+    const nodeRows = [
+      { id: "1", ref: "1", lat: 52.0, lon: 5.0 },
+      { id: "2", ref: "2", lat: 52.1, lon: 5.1 },
+    ];
+    const segRows = [
+      {
+        id: "100",
+        coordinates: [],
+        nodeIds: [1, 99],
+        minLat: 52.0,
+        maxLat: 52.1,
+        minLon: 5.0,
+        maxLon: 5.1,
+      },
+    ];
+    const result = filterRoutableNodes(nodeRows, segRows);
+    expect(result.map((n) => n.id)).toEqual(["1"]);
+  });
+
+  it("excludes an rcnRef node that appears in no way (standalone marker)", () => {
+    const nodeRows = [{ id: "63", ref: "63", lat: 52.0, lon: 5.0 }];
+    const result = filterRoutableNodes(nodeRows, []);
+    expect(result).toHaveLength(0);
+  });
+
+  it("returns all nodes when every node appears in a segment", () => {
+    const nodeRows = [
+      { id: "1", ref: "1", lat: 52.0, lon: 5.0 },
+      { id: "2", ref: "2", lat: 52.1, lon: 5.1 },
+    ];
+    const segRows = [
+      {
+        id: "100",
+        coordinates: [],
+        nodeIds: [1, 2, 99],
+        minLat: 52.0,
+        maxLat: 52.1,
+        minLon: 5.0,
+        maxLon: 5.1,
+      },
+    ];
+    const result = filterRoutableNodes(nodeRows, segRows);
+    expect(result).toHaveLength(2);
+  });
+
+  it("returns empty when there are no nodes", () => {
+    const result = filterRoutableNodes([], []);
+    expect(result).toHaveLength(0);
   });
 });

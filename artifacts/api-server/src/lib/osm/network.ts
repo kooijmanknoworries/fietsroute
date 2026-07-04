@@ -62,9 +62,20 @@ export async function getNetworkData(bbox: Bbox): Promise<NetworkData> {
 
   const { nodes, ways } = await fetchOverpassTiles(bbox);
 
+  // Only advertise nodes that appear in at least one routing way. Standalone
+  // rcnRef nodes (not members of any route=bicycle relation) look clickable on
+  // the map but can't be routed — filtering them here prevents HTTP 422 on the
+  // route endpoint for these nodes.
+  const wayNodeIds = new Set<number>();
+  for (const way of ways) {
+    for (const nid of way.nodes) {
+      wayNodeIds.add(nid);
+    }
+  }
+
   const resultNodes: NetworkNode[] = [];
   for (const n of nodes.values()) {
-    if (n.rcnRef) {
+    if (n.rcnRef && wayNodeIds.has(n.id)) {
       resultNodes.push({ id: String(n.id), ref: n.rcnRef, lat: n.lat, lon: n.lon });
     }
   }

@@ -333,14 +333,14 @@ export async function getNetworkForRoute(bbox: Bbox): Promise<OverpassResult> {
   return { nodes, ways };
 }
 
-interface NodeInsert {
+export interface NodeInsert {
   id: string;
   ref: string;
   lat: number;
   lon: number;
 }
 
-interface SegmentInsert {
+export interface SegmentInsert {
   id: string;
   coordinates: number[][];
   nodeIds: number[];
@@ -418,6 +418,59 @@ async function pruneStaleSegments(before: Date): Promise<number> {
   return deleted.length;
 }
 
+// Keep only nodes whose OSM ID appears in at least one segment's nodeIds.
+// A node with an rcnRef tag but no connecting way exists in OSM but is absent
+// from the routing graph, so advertising it as a clickable marker would lead
+// to "Could not locate node" 422 errors. Exported for unit testing.
+export function filterRoutableNodes(
+  nodeRows: NodeInsert[],
+  segRows: SegmentInsert[],
+): NodeInsert[] {
+  const routableIds = new Set<number>();
+  for (const seg of segRows) {
+    for (const nid of seg.nodeIds) {
+      routableIds.add(nid);
+    }
+  }
+  return nodeRows.filter((n) => routableIds.has(Number(n.id)));
+}
+
+// Remove any network_nodes row whose OSM node ID does not appear in any stored
+// segment's nodeIds. These orphan markers exist in OSM with an rcnRef tag but
+// are not part of any route=bicycle relation way, so they look clickable on the
+// map but cannot be routed. Calling this once at startup and after each full
+// import ensures the dataset stays consistent with the routing graph.
+async function pruneNonRoutableNodes(): Promise<void> {
+  try {
+    // Guard: an empty network_segments table would make the subquery return
+    // the empty set, and "NOT IN (empty set)" is always false → every node
+    // would survive. More importantly, if we have no segments at all we cannot
+    // distinguish routable from non-routable anyway, so skip.
+    const segCount = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(networkSegmentsTable);
+    if (Number(segCount[0]?.count ?? 0) === 0) return;
+
+    const pruned = await db
+      .delete(networkNodesTable)
+      .where(
+        sql`${networkNodesTable.id}::integer NOT IN (
+          SELECT DISTINCT unnest(node_ids) FROM network_segments
+        )`,
+      )
+      .returning({ id: networkNodesTable.id });
+
+    if (pruned.length > 0) {
+      logger.info(
+        { deleted: pruned.length },
+        "Pruned non-routable nodes from dataset",
+      );
+    }
+  } catch (err) {
+    logger.warn({ err }, "Failed to prune non-routable nodes, skipping");
+  }
+}
+
 // Import a single chunk: fetch from Overpass, upsert nodes/segments, then
 // prune nodes in that chunk that weren't seen (they no longer exist in OSM).
 async function importChunk(
@@ -471,7 +524,10 @@ async function importChunk(
     });
   }
 
-  if (nodeRows.length > 0) await upsertNodes(nodeRows);
+  // Only store nodes that are part of at least one routing way — standalone
+  // rcnRef nodes (no connecting way) are not graph vertices and cannot be routed.
+  const routableNodeRows = filterRoutableNodes(nodeRows, segRows);
+  if (routableNodeRows.length > 0) await upsertNodes(routableNodeRows);
   if (segRows.length > 0) await upsertSegments(segRows);
 
   // Prune nodes in this chunk that weren't seen — they were removed from OSM.
@@ -483,7 +539,7 @@ async function importChunk(
   // Record success so a restarted import can skip this chunk.
   await markChunkFresh(chunk);
 
-  return { nodes: nodeRows.length, segs: segRows.length };
+  return { nodes: routableNodeRows.length, segs: segRows.length };
 }
 
 let importing = false;
@@ -539,6 +595,10 @@ export async function importNetworkDataset(): Promise<void> {
       if (prunedSegs > 0) {
         logger.info({ prunedSegs }, "Pruned stale segments after full import");
       }
+      // One-time cleanup of any pre-existing non-routable nodes that were
+      // stored before this filter was introduced. Per-chunk filtering in
+      // importChunk handles future imports; this catches the existing backlog.
+      await pruneNonRoutableNodes();
     }
 
     // Safety net: if every chunk was skipped because of fresh markers but the
@@ -822,6 +882,11 @@ export function startNetworkPreload(): void {
     return;
   }
   const startup = setTimeout(() => {
+    // Clean up any non-routable nodes that were stored before the per-chunk
+    // filter was introduced. Runs regardless of whether a fresh import fires,
+    // so nodes that slipped in through a previous server version are evicted
+    // within STARTUP_DELAY_MS of the first boot after this change is deployed.
+    void pruneNonRoutableNodes();
     void maybeImport();
   }, STARTUP_DELAY_MS);
   startup.unref();

@@ -111,6 +111,26 @@ describe("GET /api/network", () => {
     ]);
   });
 
+  it("excludes rcnRef nodes that are not connected to any way", async () => {
+    // node 1 is in way 100 → routable, must be returned
+    // node 9001 has rcn_ref but is NOT in any way → non-routable, must be filtered out
+    mockOverpass([
+      { type: "node", id: 1, lat: 52.01, lon: 5.01, tags: { rcn_ref: "34" } },
+      { type: "node", id: 9001, lat: 52.03, lon: 5.03, tags: { rcn_ref: "63" } },
+      { type: "node", id: 2, lat: 52.02, lon: 5.02 },
+      { type: "way", id: 100, nodes: [1, 2] },
+    ]);
+
+    const res = await request(buildApp())
+      .get("/api/network")
+      .query({ bbox: "5.0,52.0,5.05,52.05" });
+
+    expect(res.status).toBe(200);
+    const ids = (res.body.nodes as { id: string }[]).map((n) => n.id);
+    expect(ids).toContain("1");
+    expect(ids).not.toContain("9001");
+  });
+
   it("rejects an oversized bbox without calling Overpass", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
 
