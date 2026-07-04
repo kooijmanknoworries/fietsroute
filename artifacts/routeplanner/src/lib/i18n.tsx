@@ -20,6 +20,9 @@ const en = {
   "auth.signInSubtitle": "Sign in to access your saved cycling routes",
   "auth.signUpTitle": "Create your account",
   "auth.signUpSubtitle": "Save your cycling routes and reach them from any device",
+  "auth.sessionExpired.title": "Your session expired",
+  "auth.sessionExpired.desc": "Please sign in again to keep planning. Your current route is kept.",
+  "auth.signInAgain": "Sign in again",
 
   "access.pendingTitle": "Waiting for approval",
   "access.pendingDesc":
@@ -171,6 +174,9 @@ const nl: Record<TranslationKey, string> = {
   "auth.signInSubtitle": "Log in om je opgeslagen fietsroutes te bekijken",
   "auth.signUpTitle": "Maak je account aan",
   "auth.signUpSubtitle": "Sla je fietsroutes op en bekijk ze op elk apparaat",
+  "auth.sessionExpired.title": "Je sessie is verlopen",
+  "auth.sessionExpired.desc": "Log opnieuw in om verder te plannen. Je huidige route blijft bewaard.",
+  "auth.signInAgain": "Opnieuw inloggen",
 
   "access.pendingTitle": "Wacht op goedkeuring",
   "access.pendingDesc":

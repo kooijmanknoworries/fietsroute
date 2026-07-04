@@ -8,13 +8,18 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
-import { Stack } from "expo-router";
+import { Stack, router, type Href } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
+import { Alert } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { setBaseUrl, setAuthTokenGetter } from "@workspace/api-client-react";
+import {
+  setBaseUrl,
+  setAuthTokenGetter,
+  setUnauthorizedHandler,
+} from "@workspace/api-client-react";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RoutePlannerProvider } from "@/context/RoutePlannerContext";
@@ -46,6 +51,41 @@ function AuthTokenBridge() {
   useEffect(() => {
     queryClient.invalidateQueries();
   }, [isSignedIn]);
+
+  return null;
+}
+
+// When any API call returns 401 — a Clerk session that expired or was revoked
+// mid-ride — prompt the rider to sign in again and route them to the sign-in
+// screen instead of surfacing a generic "kan niet laden" failure. Because
+// RoutePlannerProvider sits above the router, an in-progress route survives the
+// navigation, so the rider returns to it after re-authenticating.
+function SessionExpiredHandler() {
+  // Collapse the burst of 401s a single expiry can produce into one prompt.
+  const promptOpenRef = useRef(false);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (promptOpenRef.current) return;
+      promptOpenRef.current = true;
+
+      Alert.alert(
+        "Je sessie is verlopen",
+        "Log opnieuw in om verder te gaan. Je route blijft bewaard.",
+        [
+          {
+            text: "Opnieuw inloggen",
+            onPress: () => {
+              promptOpenRef.current = false;
+              router.push("/(auth)/sign-in" as Href);
+            },
+          },
+        ],
+        { onDismiss: () => (promptOpenRef.current = false) },
+      );
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   return null;
 }
@@ -88,6 +128,7 @@ export default function RootLayout() {
           <ErrorBoundary>
             <QueryClientProvider client={queryClient}>
               <AuthTokenBridge />
+              <SessionExpiredHandler />
               <GestureHandlerRootView style={{ flex: 1 }}>
                 <KeyboardProvider>
                   <RoutePlannerProvider>

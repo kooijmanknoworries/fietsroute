@@ -19,7 +19,10 @@ import {
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
+import { setUnauthorizedHandler } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
+import { ToastAction } from "@/components/ui/toast";
+import { useToast } from "@/hooks/use-toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
@@ -144,6 +147,51 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+// When any API call returns 401 — a Clerk session that expired or was revoked
+// mid-use — prompt the rider to sign in again with a persistent toast instead
+// of letting the failure surface as a generic error. The "Sign in again" action
+// navigates to the sign-in page; we don't force-navigate, so an in-progress
+// route stays intact until the rider chooses to re-authenticate.
+function SessionExpiredHandler() {
+  const { toast } = useToast();
+  const { t } = useI18n();
+  const [, setLocation] = useLocation();
+
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  const tRef = useRef(t);
+  tRef.current = t;
+  const setLocationRef = useRef(setLocation);
+  setLocationRef.current = setLocation;
+  // Collapse the burst of 401s a single expiry can produce into one prompt.
+  const lastShownRef = useRef(0);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      const now = Date.now();
+      if (now - lastShownRef.current < 3000) return;
+      lastShownRef.current = now;
+
+      toastRef.current({
+        title: tRef.current("auth.sessionExpired.title"),
+        description: tRef.current("auth.sessionExpired.desc"),
+        variant: "destructive",
+        action: (
+          <ToastAction
+            altText={tRef.current("auth.signInAgain")}
+            onClick={() => setLocationRef.current("/sign-in")}
+          >
+            {tRef.current("auth.signInAgain")}
+          </ToastAction>
+        ),
+      });
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
+  return null;
+}
+
 // Gate the planner behind an authenticated Clerk session. Signed-out visitors
 // are redirected to the sign-in screen (sign-up remains reachable from there);
 // the planner only renders once signed in.
@@ -203,6 +251,7 @@ function ClerkProviderWithRoutes() {
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
         <TooltipProvider>
+          <SessionExpiredHandler />
           <Router />
           <Toaster />
         </TooltipProvider>

@@ -8,6 +8,17 @@ export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
 
+/**
+ * Called whenever an API request comes back with HTTP 401 Unauthorized —
+ * typically because a Clerk session expired or was revoked mid-use. Apps
+ * register a handler to prompt the rider to sign in again instead of surfacing
+ * the failure as a generic error.
+ */
+export type UnauthorizedHandler = (context: {
+  url: string;
+  method: string;
+}) => void;
+
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
@@ -17,6 +28,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _unauthorizedHandler: UnauthorizedHandler | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +54,19 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a handler that runs whenever any request returns HTTP 401. This is
+ * the single, central place a mid-session sign-out is detected, so both the web
+ * and mobile clients can react (e.g. prompt the rider to sign in again) no
+ * matter which endpoint failed. Pass `null` to clear the handler.
+ *
+ * The handler runs before the request's `ApiError` is thrown, so callers still
+ * receive the rejection and can handle it locally as usual.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  _unauthorizedHandler = handler;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -363,6 +388,16 @@ export async function customFetch<T = unknown>(
   const response = await fetch(input, { ...init, method, headers });
 
   if (!response.ok) {
+    // Surface an expired/revoked session centrally so every client can prompt
+    // the rider to re-authenticate, regardless of which endpoint failed. The
+    // handler must never block or throw, so isolate it from the caller's flow.
+    if (response.status === 401 && _unauthorizedHandler) {
+      try {
+        _unauthorizedHandler({ url: requestInfo.url, method });
+      } catch {
+        // Ignore handler errors — reporting the original failure matters more.
+      }
+    }
     const errorData = await parseErrorBody(response, method);
     throw new ApiError(response, errorData, requestInfo);
   }
