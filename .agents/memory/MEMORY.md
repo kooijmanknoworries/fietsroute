@@ -6,6 +6,7 @@
 - [Geocode persistent cache](geocode-persistent-cache.md) — municipality searches cached in Postgres (`geocode_cache`, 24h TTL) behind in-memory L1; mirrors overpass; route param is `q`.
 - [Workspace lib typecheck](workspace-db-typecheck.md) — after adding exports to a referenced lib (`@workspace/db`, `@workspace/api-zod`), rebuild its `dist/*.d.ts` (`tsc -b lib/<pkg>/tsconfig.json`) or api-server typecheck fails on missing members.
 - [Saved routes ownership](saved-routes-ownership.md) — routes now scoped to Clerk user id (x-owner-key superseded); mobile bridges token via setAuthTokenGetter, plus AsyncStorage local backups.
+- [Web API bearer auth](web-api-auth-token.md) — web app must register setAuthTokenGetter (Clerk getToken) like mobile; cookie auth fails cross-origin so every endpoint 401s (blank map) without it.
 - [Orval schema naming](orval-schema-naming.md) — response component schemas must not be named `<OperationId>Response` or codegen double-exports and tsc fails TS2308; use `...Result`.
 - [API server has no hot reload](api-server-no-hot-reload.md) — api-server dev is `build && start`; restart the workflow after editing server code or tests run against the stale build.
 - [MapLibre attribution gating](maplibre-attribution.md) — AttributionControl shows a source's attribution only while a layer using it is visible; toggling layer visibility:none drops it (verified v4.7.1).

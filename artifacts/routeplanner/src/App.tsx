@@ -22,6 +22,7 @@ import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import {
   createUnauthorizedHandler,
+  setAuthTokenGetter,
   setUnauthorizedHandler,
 } from "@workspace/api-client-react";
 import { Toaster } from "@/components/ui/toaster";
@@ -202,6 +203,27 @@ function SessionExpiredHandler() {
   return null;
 }
 
+// Attach the signed-in rider's Clerk session token as a bearer to every API
+// request. The API server gates all endpoints behind Clerk auth, and the shared
+// __session cookie isn't accepted across the web app / API server origins, so
+// without this header every request (including /api/network, which supplies the
+// knooppunten) returns 401 and the map renders empty. This mirrors how the
+// mobile app authenticates via setAuthTokenGetter. A ref keeps the getter
+// pointing at Clerk's latest getToken without re-registering on every render.
+function ApiAuthTokenBridge() {
+  const { getToken } = useAuth();
+
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  useEffect(() => {
+    setAuthTokenGetter(() => getTokenRef.current());
+    return () => setAuthTokenGetter(null);
+  }, []);
+
+  return null;
+}
+
 // Gate the planner behind an authenticated Clerk session. Signed-out visitors
 // are redirected to the sign-in screen (sign-up remains reachable from there);
 // the planner only renders once signed in.
@@ -261,6 +283,7 @@ function ClerkProviderWithRoutes() {
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
         <TooltipProvider>
+          <ApiAuthTokenBridge />
           <SessionExpiredHandler />
           <Router />
           <Toaster />

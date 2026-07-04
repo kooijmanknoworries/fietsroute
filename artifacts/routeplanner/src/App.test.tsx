@@ -30,6 +30,26 @@ vi.mock("@clerk/react", () => ({
   }),
 }));
 
+// Capture the bearer-token getter the app registers with the API client. The
+// API server gates every endpoint (including /api/network, which feeds the map
+// knooppunten) behind Clerk auth, so the web app must attach an
+// `Authorization: Bearer` token. Spy on the real registration hook so a test
+// can assert the getter is wired up and actually resolves the session token.
+const registeredAuthTokenGetter = vi.hoisted(
+  () => ({ current: undefined as undefined | (() => unknown) }),
+);
+
+vi.mock("@workspace/api-client-react", async (importActual) => {
+  const actual =
+    await importActual<typeof import("@workspace/api-client-react")>();
+  return {
+    ...actual,
+    setAuthTokenGetter: vi.fn((getter: (() => unknown) | null) => {
+      registeredAuthTokenGetter.current = getter ?? undefined;
+    }),
+  };
+});
+
 vi.mock("@clerk/react/internal", () => ({
   publishableKeyFromHost: () => "pk_test_fake",
 }));
@@ -76,5 +96,20 @@ describe("App auth gate", () => {
 
     expect(screen.getByTestId("home-planner")).toBeTruthy();
     expect(screen.queryByTestId("sign-in-page")).toBeNull();
+  });
+
+  // Regression guard for the blank-map bug: with all API endpoints gated behind
+  // Clerk auth, the web app must attach the session token as a bearer or every
+  // request (knooppunten included) 401s. Assert the registered getter resolves
+  // the signed-in user's token so re-tightening auth can't silently blank the
+  // map again.
+  it("registers a Clerk bearer-token getter that resolves the session token when signed in", async () => {
+    authState.status = "signed-in";
+    registeredAuthTokenGetter.current = undefined;
+
+    await renderApp();
+
+    expect(registeredAuthTokenGetter.current).toBeTypeOf("function");
+    await expect(registeredAuthTokenGetter.current!()).resolves.toBe("token");
   });
 });
