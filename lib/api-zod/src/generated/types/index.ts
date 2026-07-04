@@ -30,4 +30,7 @@ export * from './routeRequestNode';
 export * from './savedRoute';
 export * from './savedRouteSummary';
 export * from './saveRouteRequest';
+export * from './saveVisitedSegmentsRequest';
+export * from './saveVisitedSegmentsResult';
 export * from './updateSavedRouteRequest';
+export * from './visitedSegment';

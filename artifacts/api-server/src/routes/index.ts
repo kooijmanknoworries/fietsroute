@@ -6,6 +6,7 @@ import routeRouter from "./route";
 import regionsRouter from "./regions";
 import geocodeRouter from "./geocode";
 import savedRoutesRouter from "./saved-routes";
+import visitedSegmentsRouter from "./visited-segments";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(routeRouter);
 router.use(regionsRouter);
 router.use(geocodeRouter);
 router.use(savedRoutesRouter);
+router.use(visitedSegmentsRouter);
 
 export default router;

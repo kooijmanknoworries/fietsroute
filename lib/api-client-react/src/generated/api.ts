@@ -35,9 +35,12 @@ import type {
   RoutePlan,
   RouteRequest,
   SaveRouteRequest,
+  SaveVisitedSegmentsRequest,
+  SaveVisitedSegmentsResult,
   SavedRoute,
   SavedRouteSummary,
-  UpdateSavedRouteRequest
+  UpdateSavedRouteRequest,
+  VisitedSegment
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1059,5 +1062,157 @@ export const useDeleteSavedRoute = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getDeleteSavedRouteMutationOptions(options));
+    }
+
+export const getListVisitedSegmentsUrl = () => {
+
+
+
+
+  return `/api/visited-segments`
+}
+
+/**
+ * Returns every network leg the signed-in rider has completed on past rides, so the map can show lock markers for what they have already ridden. Requires authentication.
+
+ * @summary List the rider's permanently visited segments
+ */
+export const listVisitedSegments = async ( options?: RequestInit): Promise<VisitedSegment[]> => {
+
+  return customFetch<VisitedSegment[]>(getListVisitedSegmentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListVisitedSegmentsQueryKey = () => {
+    return [
+    `/api/visited-segments`
+    ] as const;
+    }
+
+
+export const getListVisitedSegmentsQueryOptions = <TData = Awaited<ReturnType<typeof listVisitedSegments>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listVisitedSegments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListVisitedSegmentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listVisitedSegments>>> = ({ signal }) => listVisitedSegments({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listVisitedSegments>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListVisitedSegmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listVisitedSegments>>>
+export type ListVisitedSegmentsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List the rider's permanently visited segments
+ */
+
+export function useListVisitedSegments<TData = Awaited<ReturnType<typeof listVisitedSegments>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listVisitedSegments>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListVisitedSegmentsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSaveVisitedSegmentsUrl = () => {
+
+
+
+
+  return `/api/visited-segments`
+}
+
+/**
+ * Persists the legs the rider has completed. Already-recorded segments are ignored, so this can be called repeatedly during and after a ride. Requires authentication.
+
+ * @summary Record segments completed during a ride
+ */
+export const saveVisitedSegments = async (saveVisitedSegmentsRequest: SaveVisitedSegmentsRequest, options?: RequestInit): Promise<SaveVisitedSegmentsResult> => {
+
+  return customFetch<SaveVisitedSegmentsResult>(getSaveVisitedSegmentsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      saveVisitedSegmentsRequest,)
+  }
+);}
+
+
+
+
+export const getSaveVisitedSegmentsMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveVisitedSegments>>, TError,{data: BodyType<SaveVisitedSegmentsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveVisitedSegments>>, TError,{data: BodyType<SaveVisitedSegmentsRequest>}, TContext> => {
+
+const mutationKey = ['saveVisitedSegments'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveVisitedSegments>>, {data: BodyType<SaveVisitedSegmentsRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveVisitedSegments(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveVisitedSegmentsMutationResult = NonNullable<Awaited<ReturnType<typeof saveVisitedSegments>>>
+    export type SaveVisitedSegmentsMutationBody = BodyType<SaveVisitedSegmentsRequest>
+    export type SaveVisitedSegmentsMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Record segments completed during a ride
+ */
+export const useSaveVisitedSegments = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveVisitedSegments>>, TError,{data: BodyType<SaveVisitedSegmentsRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveVisitedSegments>>,
+        TError,
+        {data: BodyType<SaveVisitedSegmentsRequest>},
+        TContext
+      > => {
+      return useMutation(getSaveVisitedSegmentsMutationOptions(options));
     }
 

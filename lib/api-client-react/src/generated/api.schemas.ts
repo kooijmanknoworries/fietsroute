@@ -171,6 +171,32 @@ export interface SavedRouteSummary {
   createdAt: string;
 }
 
+/**
+ * A network leg (between two consecutive knooppunten) the rider has completed. Identified by a stable key derived from its endpoint node ids; carries a representative point for placing a lock marker.
+
+ */
+export interface VisitedSegment {
+  /** Stable canonical id for the leg (sorted endpoint node ids). */
+  segmentKey: string;
+  /** Knooppunt number at one end of the leg. */
+  fromRef: string;
+  /** Knooppunt number at the other end of the leg. */
+  toRef: string;
+  /** Longitude of the leg midpoint (lock marker position). */
+  lon: number;
+  /** Latitude of the leg midpoint (lock marker position). */
+  lat: number;
+}
+
+export interface SaveVisitedSegmentsRequest {
+  segments: VisitedSegment[];
+}
+
+export interface SaveVisitedSegmentsResult {
+  /** How many new segments were added to the history. */
+  saved: number;
+}
+
 export interface Region {
   id: string;
   name: string;

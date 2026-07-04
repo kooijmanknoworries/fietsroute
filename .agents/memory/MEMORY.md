@@ -19,3 +19,4 @@
 - [Overpass endpoint reliability](overpass-endpoints-reliability.md) — mail.ru mirror works, .fr is 403 whitelist-only; client timeout must exceed query `[timeout:N]`; serialize all requests in one slot.
 - [Resumable network import](resumable-network-import.md) — chunks marked `import-chunk:` in `overpass_cache`; prune only on clean runs; 10-min loop self-heals incomplete datasets.
 - [Network dataset freshness](network-dataset-freshness.md) — rolling refresh re-imports oldest chunk on a STALE_MS/chunk cadence; `GET /api/network/status` shows age/coverage; 0 markers ≠ empty dataset.
+- [Ride tracking](ride-tracking.md) — MapLibre icons must be raw ImageData not canvas (jsdom has no 2D ctx); segment id = sorted OSM node-id pair; history persist gated to signed-in.

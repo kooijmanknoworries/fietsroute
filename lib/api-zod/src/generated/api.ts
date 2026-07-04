@@ -280,3 +280,38 @@ export const DeleteSavedRouteParams = zod.object({
 })
 
 
+/**
+ * Returns every network leg the signed-in rider has completed on past rides, so the map can show lock markers for what they have already ridden. Requires authentication.
+
+ * @summary List the rider's permanently visited segments
+ */
+export const ListVisitedSegmentsResponseItem = zod.object({
+  "segmentKey": zod.string().describe('Stable canonical id for the leg (sorted endpoint node ids).'),
+  "fromRef": zod.string().describe('Knooppunt number at one end of the leg.'),
+  "toRef": zod.string().describe('Knooppunt number at the other end of the leg.'),
+  "lon": zod.number().describe('Longitude of the leg midpoint (lock marker position).'),
+  "lat": zod.number().describe('Latitude of the leg midpoint (lock marker position).')
+}).describe('A network leg (between two consecutive knooppunten) the rider has completed. Identified by a stable key derived from its endpoint node ids; carries a representative point for placing a lock marker.\n')
+export const ListVisitedSegmentsResponse = zod.array(ListVisitedSegmentsResponseItem)
+
+
+/**
+ * Persists the legs the rider has completed. Already-recorded segments are ignored, so this can be called repeatedly during and after a ride. Requires authentication.
+
+ * @summary Record segments completed during a ride
+ */
+export const SaveVisitedSegmentsBody = zod.object({
+  "segments": zod.array(zod.object({
+  "segmentKey": zod.string().describe('Stable canonical id for the leg (sorted endpoint node ids).'),
+  "fromRef": zod.string().describe('Knooppunt number at one end of the leg.'),
+  "toRef": zod.string().describe('Knooppunt number at the other end of the leg.'),
+  "lon": zod.number().describe('Longitude of the leg midpoint (lock marker position).'),
+  "lat": zod.number().describe('Latitude of the leg midpoint (lock marker position).')
+}).describe('A network leg (between two consecutive knooppunten) the rider has completed. Identified by a stable key derived from its endpoint node ids; carries a representative point for placing a lock marker.\n'))
+})
+
+export const SaveVisitedSegmentsResponse = zod.object({
+  "saved": zod.number().describe('How many new segments were added to the history.')
+})
+
+

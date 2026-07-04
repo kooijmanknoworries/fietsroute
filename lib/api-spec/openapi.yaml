@@ -361,6 +361,63 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /visited-segments:
+    get:
+      operationId: listVisitedSegments
+      tags: [routes]
+      summary: List the rider's permanently visited segments
+      description: >
+        Returns every network leg the signed-in rider has completed on past
+        rides, so the map can show lock markers for what they have already
+        ridden. Requires authentication.
+      responses:
+        "200":
+          description: Visited segments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VisitedSegment"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: saveVisitedSegments
+      tags: [routes]
+      summary: Record segments completed during a ride
+      description: >
+        Persists the legs the rider has completed. Already-recorded segments are
+        ignored, so this can be called repeatedly during and after a ride.
+        Requires authentication.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveVisitedSegmentsRequest"
+      responses:
+        "200":
+          description: How many new segments were recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveVisitedSegmentsResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -681,6 +738,51 @@ components:
         - distanceMeters
         - nodeRefs
         - createdAt
+    VisitedSegment:
+      type: object
+      description: >
+        A network leg (between two consecutive knooppunten) the rider has
+        completed. Identified by a stable key derived from its endpoint node
+        ids; carries a representative point for placing a lock marker.
+      properties:
+        segmentKey:
+          type: string
+          description: Stable canonical id for the leg (sorted endpoint node ids).
+        fromRef:
+          type: string
+          description: Knooppunt number at one end of the leg.
+        toRef:
+          type: string
+          description: Knooppunt number at the other end of the leg.
+        lon:
+          type: number
+          description: Longitude of the leg midpoint (lock marker position).
+        lat:
+          type: number
+          description: Latitude of the leg midpoint (lock marker position).
+      required:
+        - segmentKey
+        - fromRef
+        - toRef
+        - lon
+        - lat
+    SaveVisitedSegmentsRequest:
+      type: object
+      properties:
+        segments:
+          type: array
+          items:
+            $ref: "#/components/schemas/VisitedSegment"
+      required:
+        - segments
+    SaveVisitedSegmentsResult:
+      type: object
+      properties:
+        saved:
+          type: integer
+          description: How many new segments were added to the history.
+      required:
+        - saved
     Region:
       type: object
       properties:

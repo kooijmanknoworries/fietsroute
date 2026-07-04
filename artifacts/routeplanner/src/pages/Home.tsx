@@ -20,7 +20,10 @@ import {
   Pencil,
   LogIn,
   LogOut,
-  Globe
+  Globe,
+  Play,
+  Square,
+  Lock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,6 +55,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useRoutePlanner } from "@/hooks/use-route-planner";
+import { useRide } from "@/hooks/use-ride";
 import { useClaimAnonymousRoutes } from "@/hooks/use-claim-anonymous-routes";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
@@ -122,6 +126,20 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { user } = useUser();
   const { signOut } = useClerk();
+
+  const {
+    canRide,
+    isRiding,
+    startRide,
+    stopRide,
+    gpsError,
+    ridePosition,
+    followRide,
+    traveledCoordinates,
+    progressMeters,
+    totalMeters,
+    lockPoints,
+  } = useRide({ routePlan, selectedNodes, isSignedIn: !!user });
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -562,6 +580,68 @@ export default function Home() {
                         <LogIn className="mr-2 h-4 w-4" /> {t("route.signInToSave")}
                       </Button>
                     </Show>
+
+                    {/* Live ride tracking */}
+                    <Separator className="my-1" />
+                    {!isRiding ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="w-full"
+                        disabled={!canRide}
+                        onClick={startRide}
+                      >
+                        <Play className="mr-2 h-4 w-4" /> {t("ride.start")}
+                      </Button>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center gap-1.5 font-medium text-primary">
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                            </span>
+                            {t("ride.riding")}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {t("ride.progress", {
+                              done: formatDistance(progressMeters),
+                              total: formatDistance(totalMeters),
+                            })}
+                          </span>
+                        </div>
+                        {gpsError && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              {gpsError === "denied"
+                                ? t("ride.gpsDenied")
+                                : t("ride.gpsUnavailable")}
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        {!gpsError && !ridePosition && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {t("ride.waitingForGps")}
+                          </div>
+                        )}
+                        <Show when="signed-out">
+                          <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+                            {t("ride.signInToSaveHistory")}
+                          </p>
+                        </Show>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={stopRide}
+                        >
+                          <Square className="mr-2 h-4 w-4" /> {t("ride.stop")}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -719,6 +799,10 @@ export default function Home() {
           flyToRegion={flyToRegion}
           initialBounds={initialBounds}
           fitBounds={fitBounds}
+          ridePosition={ridePosition}
+          traveledCoordinates={traveledCoordinates}
+          visitedLockPoints={lockPoints}
+          followRide={followRide}
         />
       </div>
 

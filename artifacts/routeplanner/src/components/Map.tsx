@@ -45,6 +45,14 @@ interface MapProps {
   flyToRegion?: { lat: number; lon: number; zoom: number } | null;
   initialBounds?: Bounds | null;
   fitBounds?: Bounds | null;
+  /** Live snapped "you are here" position as [lon, lat] while riding. */
+  ridePosition?: number[] | null;
+  /** The travelled portion of the route, recoloured while riding. */
+  traveledCoordinates?: number[][] | null;
+  /** Lock markers for completed / previously-ridden segments. */
+  visitedLockPoints?: { lon: number; lat: number }[];
+  /** Whether the map recenters to follow the rider. Defaults to true. */
+  followRide?: boolean;
 }
 
 // Free, keyless raster basemaps. The CARTO styles' "@2x" variant serves high-
@@ -102,6 +110,112 @@ const SATELLITE_ATTRIBUTION =
 
 const UTRECHT = { lat: 52.0907, lon: 5.1214, zoom: 13 };
 
+const RIDE_LOCK_IMAGE_ID = "ride-lock";
+
+// Build a small padlock icon as raw RGBA pixels (an ImageData-like object).
+// Generating the pixels directly avoids needing a <canvas> 2D context, which
+// isn't available in the jsdom test environment, so the same code path runs in
+// tests and in real browsers. Marks a segment the rider has already completed.
+function makeLockIcon(ratio = 2): {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+} {
+  const size = 22;
+  const width = Math.round(size * ratio);
+  const height = Math.round(size * ratio);
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  // All geometry is expressed in logical (unscaled) coordinates.
+  const bodyX0 = 4,
+    bodyX1 = 18,
+    bodyY0 = 10,
+    bodyY1 = 20,
+    bodyR = 2.5;
+  const shCx = 11,
+    shCy = 10,
+    shOuter = 6,
+    shInner = 3.4;
+  const keyCx = 11,
+    keyCy = 14.5,
+    keyR = 1.5;
+
+  const clamp = (v: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, v));
+
+  const inRoundedRect = (
+    x: number,
+    y: number,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    r: number,
+  ): boolean => {
+    const dx = x - clamp(x, x0 + r, x1 - r);
+    const dy = y - clamp(y, y0 + r, y1 - r);
+    return dx * dx + dy * dy <= r * r;
+  };
+
+  // The U-shaped shackle: an upper ring plus the two short legs meeting the
+  // body top. Only the portion above the body is drawn.
+  const inShackle = (x: number, y: number, grow: number): boolean => {
+    if (y > bodyY0 + 0.5) return false;
+    const dx = x - shCx;
+    const dy = y - shCy;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    return d <= shOuter + grow && d >= shInner - grow;
+  };
+
+  const inShape = (x: number, y: number, grow: number): boolean =>
+    inRoundedRect(
+      x,
+      y,
+      bodyX0 - grow,
+      bodyY0 - grow,
+      bodyX1 + grow,
+      bodyY1 + grow,
+      bodyR + grow,
+    ) || inShackle(x, y, grow);
+
+  const setPixel = (
+    px: number,
+    py: number,
+    r: number,
+    g: number,
+    b: number,
+    a: number,
+  ) => {
+    const idx = (py * width + px) * 4;
+    data[idx] = r;
+    data[idx + 1] = g;
+    data[idx + 2] = b;
+    data[idx + 3] = a;
+  };
+
+  for (let py = 0; py < height; py++) {
+    for (let px = 0; px < width; px++) {
+      const x = px / ratio;
+      const y = py / ratio;
+      const dxk = x - keyCx;
+      const dyk = y - keyCy;
+      const inKeyhole = dxk * dxk + dyk * dyk <= keyR * keyR;
+
+      if (inShape(x, y, 0)) {
+        if (inKeyhole) {
+          setPixel(px, py, 255, 255, 255, 255); // keyhole
+        } else {
+          setPixel(px, py, 51, 65, 85, 255); // slate-700 lock body
+        }
+      } else if (inShape(x, y, 1.1)) {
+        setPixel(px, py, 255, 255, 255, 235); // white halo for contrast
+      }
+    }
+  }
+
+  return { width, height, data };
+}
+
 export default function Map({
   nodes,
   segments,
@@ -114,7 +228,11 @@ export default function Map({
   onRecenter,
   flyToRegion,
   initialBounds,
-  fitBounds
+  fitBounds,
+  ridePosition,
+  traveledCoordinates,
+  visitedLockPoints,
+  followRide = true,
 }: MapProps) {
   const { t } = useI18n();
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -123,6 +241,7 @@ export default function Map({
   const onNodeClickRef = useRef(onNodeClick);
   const onBboxChangeRef = useRef(onBboxChange);
   const lastCenterRef = useRef<{ lon: number; lat: number } | null>(null);
+  const rideMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [mapError, setMapError] = useState(false);
   const [baseLayer, setBaseLayerState] = useState<BaseLayer>(() => getBaseLayer());
   const baseLayerRef = useRef<BaseLayer>(baseLayer);
@@ -408,6 +527,27 @@ export default function Map({
         }
       });
 
+      // Ride-traveled: the portion of the planned route already ridden, drawn
+      // on top of the planned route so the completed stretch reads as a
+      // different colour. Empty until a ride is in progress.
+      m.addSource("ride-traveled", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      m.addLayer({
+        id: "ride-traveled-layer",
+        type: "line",
+        source: "ride-traveled",
+        layout: {
+          "line-join": "round",
+          "line-cap": "round"
+        },
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 6
+        }
+      });
+
       m.addSource("nodes", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
@@ -446,6 +586,32 @@ export default function Map({
             "#e11d48",
             "#2c7a4b"
           ]
+        }
+      });
+
+      // Visited-segment lock markers, rendered above every other layer so a
+      // completed leg's padlock stays visible. The icon is registered as a raw
+      // image; guard the call because the headless test map has no addImage.
+      if (typeof m.addImage === "function" && !m.hasImage?.(RIDE_LOCK_IMAGE_ID)) {
+        try {
+          m.addImage(RIDE_LOCK_IMAGE_ID, makeLockIcon(2), { pixelRatio: 2 });
+        } catch {
+          // Non-fatal: the lock layer simply renders without its icon.
+        }
+      }
+      m.addSource("visited-locks", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      m.addLayer({
+        id: "visited-locks-layer",
+        type: "symbol",
+        source: "visited-locks",
+        layout: {
+          "icon-image": RIDE_LOCK_IMAGE_ID,
+          "icon-size": 1,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true
         }
       });
 
@@ -781,6 +947,101 @@ export default function Map({
     }
 
   }, [selectedNodes, routeCoordinates, importedCoordinates, nodes]);
+
+  // Push the ride's travelled polyline and lock markers into their sources.
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const apply = () => {
+      const traveledSource = m.getSource("ride-traveled") as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (traveledSource) {
+        traveledSource.setData({
+          type: "FeatureCollection",
+          features:
+            traveledCoordinates && traveledCoordinates.length > 1
+              ? [
+                  {
+                    type: "Feature",
+                    properties: {},
+                    geometry: {
+                      type: "LineString",
+                      coordinates: traveledCoordinates,
+                    },
+                  },
+                ]
+              : [],
+        });
+      }
+
+      const locksSource = m.getSource("visited-locks") as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (locksSource) {
+        locksSource.setData({
+          type: "FeatureCollection",
+          features: (visitedLockPoints ?? []).map((p) => ({
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+          })),
+        });
+      }
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [traveledCoordinates, visitedLockPoints]);
+
+  // Maintain the live "you are here" marker and, when following, recenter the
+  // map on each new fix. The marker is a DOM element via maplibregl.Marker,
+  // which the headless test map doesn't provide — so guard its existence.
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+
+    if (!ridePosition) {
+      rideMarkerRef.current?.remove();
+      rideMarkerRef.current = null;
+      return;
+    }
+
+    if (typeof maplibregl.Marker !== "function") return;
+
+    if (!rideMarkerRef.current) {
+      const el = document.createElement("div");
+      el.className = "ride-position-marker";
+      el.style.width = "18px";
+      el.style.height = "18px";
+      el.style.borderRadius = "9999px";
+      el.style.background = "#2563eb";
+      el.style.border = "3px solid #ffffff";
+      el.style.boxShadow = "0 0 0 2px rgba(37,99,235,0.4)";
+      rideMarkerRef.current = new maplibregl.Marker({ element: el });
+    }
+
+    rideMarkerRef.current
+      .setLngLat([ridePosition[0], ridePosition[1]])
+      .addTo(m);
+
+    if (followRide && typeof m.easeTo === "function") {
+      m.easeTo({ center: [ridePosition[0], ridePosition[1]], duration: 800 });
+    }
+  }, [ridePosition, followRide]);
+
+  // Remove the ride marker if the map is torn down.
+  useEffect(() => {
+    return () => {
+      rideMarkerRef.current?.remove();
+      rideMarkerRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="relative w-full h-full">
