@@ -6,11 +6,12 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/expo";
+import { ClerkProvider, ClerkLoaded, ClerkLoading, useAuth } from "@clerk/expo";
 import { tokenCache } from "@clerk/expo/token-cache";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -70,13 +71,25 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  // Never hang on the splash screen forever: fonts load from the deployment
+  // server, and if that download stalls (flaky mobile network, proxy hiccup)
+  // useFonts may neither resolve nor error. After this timeout we render with
+  // system fonts instead of showing a dead splash/blank screen.
+  const [fontTimeoutElapsed, setFontTimeoutElapsed] = useState(false);
   useEffect(() => {
-    if (fontsLoaded || fontError) {
+    const timer = setTimeout(() => setFontTimeoutElapsed(true), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const fontsReady = fontsLoaded || !!fontError || fontTimeoutElapsed;
+
+  useEffect(() => {
+    if (fontsReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError]);
+  }, [fontsReady]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!fontsReady) return null;
 
   return (
     <ClerkProvider
@@ -84,6 +97,17 @@ export default function RootLayout() {
       tokenCache={tokenCache}
       proxyUrl={proxyUrl}
     >
+      {/* Visible progress while the Clerk client boots. Without this the app
+          shows a plain blank screen if Clerk's first request is slow, which
+          is indistinguishable from a crash for the rider. */}
+      <ClerkLoading>
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
+          <ActivityIndicator size="large" />
+          <Text style={{ marginTop: 12, color: "#666" }}>Verbinden…</Text>
+        </View>
+      </ClerkLoading>
       <ClerkLoaded>
         <SafeAreaProvider>
           <ErrorBoundary>

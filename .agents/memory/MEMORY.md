@@ -23,6 +23,7 @@
 - [Network dataset freshness](network-dataset-freshness.md) — rolling refresh re-imports oldest chunk on a STALE_MS/chunk cadence; `GET /api/network/status` shows age/coverage; 0 markers ≠ empty dataset.
 - [Ride tracking](ride-tracking.md) — MapLibre icons must be raw ImageData not canvas (jsdom has no 2D ctx); segment id = sorted OSM node-id pair; history persist gated to signed-in.
 - [Mobile map web shim](mobile-map-web-shim.md) — mobile map on web = Leaflet DOM-tile shim for react-native-maps (no WebGL); runTest can't reach it, verify with screenshot app_preview.
+- [Expo Go publish asset URLs](expo-publish-asset-urls.md) — Expo Go fetches `httpServerLocation` verbatim; publish build must emit dot-segment-free asset URLs + verify files exist on disk.
 - [Routeplanner mobile layout](routeplanner-mobile-layout.md) — mobile panel needs >= half viewport so Start ride is reachable; top-right map overlay group must wrap (max-w) to avoid colliding with the left recenter button.
 - [Ride summary](ride-summary.md) — "new segments unlocked" must diff against a start-of-ride history snapshot; live history refetches mid-ride (segments persist on completion) and undercounts to ~0.
 - [Testing async GPS/watch flows](vitest-async-act-watch.md) — sync act()+waitFor doesn't flush floating async chains (expo-location watch); use `await act(async () => { fn(); await delay })` then read mock.calls.

@@ -456,7 +456,19 @@ function updateBundleUrls(timestamp, baseUrl) {
         }
 
         const decodedPath = decodeURIComponent(unstablePath);
-        return `httpServerLocation:"${baseUrl}${basePath}/${timestamp}/_expo/static/js/${decodedPath}"`;
+        // Normalize dot segments (e.g. "./../../node_modules/...") so devices
+        // request the final path directly. Raw "../" URLs depend on the client
+        // or proxy normalizing them (the deployment proxy 302-redirects such
+        // paths), which not every HTTP stack handles for asset downloads.
+        const normalizedPath = path.posix.normalize(
+          path.posix.join("/", timestamp, "_expo", "static", "js", decodedPath),
+        );
+        if (normalizedPath.includes("..")) {
+          throw new Error(
+            `Asset path escapes static-build after normalization: ${decodedPath}`,
+          );
+        }
+        return `httpServerLocation:"${baseUrl}${basePath}${normalizedPath}"`;
       },
     );
 
@@ -495,7 +507,18 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
         const assetInfo = assetsByHash.get(hash);
         if (!assetInfo) return;
 
-        asset.url = `${baseUrl}${basePath}/${timestamp}/_expo/static/js/${assetInfo.relativePath}/${assetInfo.filename}`;
+        const normalizedPath = path.posix.normalize(
+          path.posix.join(
+            "/",
+            timestamp,
+            "_expo",
+            "static",
+            "js",
+            assetInfo.relativePath,
+            assetInfo.filename,
+          ),
+        );
+        asset.url = `${baseUrl}${basePath}${normalizedPath}`;
       });
     }
 
@@ -508,6 +531,71 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
   updateForPlatform("ios", manifests.ios);
   updateForPlatform("android", manifests.android);
   console.log("Manifests updated");
+}
+
+// Final safety net before deploying: every asset URL baked into the rewritten
+// bundles must point at a file that actually exists inside static-build.
+// Catches silent drift in Metro's asset metadata format (e.g. a regex that no
+// longer matches, so URLs stay un-rewritten or files were never copied) which
+// would otherwise only surface as fonts/icons 404-ing on riders' devices.
+function verifyBundleAssets(timestamp, baseUrl) {
+  const assetPattern =
+    /httpServerLocation:"([^"]+)"[^}]*?hash:"[^"]+"[^}]*?name:"([^"]+)"[^}]*?type:"([^"]+)"/g;
+  const urlPrefix = `${baseUrl}${basePath}`;
+  const problems = [];
+
+  for (const platform of ["ios", "android"]) {
+    const bundle = fs.readFileSync(
+      path.join(
+        projectRoot,
+        "static-build",
+        timestamp,
+        "_expo",
+        "static",
+        "js",
+        platform,
+        "bundle.js",
+      ),
+      "utf-8",
+    );
+
+    for (const match of bundle.matchAll(assetPattern)) {
+      const [, location, name, type] = match;
+      const filename = `${name}.${type}`;
+
+      if (!location.startsWith(urlPrefix)) {
+        problems.push(
+          `[${platform}] asset URL not rewritten to deployment domain: ${location}`,
+        );
+        continue;
+      }
+
+      const urlPath = decodeURIComponent(location.slice(urlPrefix.length));
+      const normalized = path.posix.normalize(
+        path.posix.join(urlPath, filename),
+      );
+      if (normalized.includes("..")) {
+        problems.push(`[${platform}] asset path escapes static-build: ${location}`);
+        continue;
+      }
+
+      const filePath = path.join(projectRoot, "static-build", normalized);
+      if (!fs.existsSync(filePath)) {
+        problems.push(
+          `[${platform}] asset file missing on disk: ${normalized} (from ${location}/${filename})`,
+        );
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    exitWithError(
+      `Bundle asset verification failed (${problems.length} problem(s)):\n` +
+        problems.map((p) => `  - ${p}`).join("\n"),
+    );
+  }
+
+  console.log("Bundle asset verification passed");
 }
 
 async function main() {
@@ -552,14 +640,15 @@ async function main() {
     });
   }
 
-  const assetCount = await downloadAssets(assets, timestamp);
+  await downloadAssets(assets, timestamp);
 
-  if (assetCount > 0) {
-    updateBundleUrls(timestamp, baseUrl);
-  }
+  updateBundleUrls(timestamp, baseUrl);
 
   console.log("Updating manifests and creating landing page...");
   updateManifests(manifests, timestamp, baseUrl, assetsByHash);
+
+  console.log("Verifying bundle asset references...");
+  verifyBundleAssets(timestamp, baseUrl);
 
   console.log("Build complete! Deploy to:", baseUrl);
 

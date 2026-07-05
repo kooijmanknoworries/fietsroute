@@ -108,6 +108,15 @@ const landingPageTemplate = fs.readFileSync(TEMPLATE_PATH, "utf-8");
 const appName = getAppName();
 
 const server = http.createServer((req, res) => {
+  // Request logging so deployment logs show what devices actually fetch
+  // (manifest, bundle, font assets) — essential for debugging blank-screen
+  // reports from Expo Go where we have no client-side logs.
+  res.on("finish", () => {
+    console.log(
+      `${req.method} ${req.url} ${res.statusCode} ua="${req.headers["user-agent"] || ""}" expo-platform="${req.headers["expo-platform"] || ""}"`,
+    );
+  });
+
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   let pathname = url.pathname;
 
