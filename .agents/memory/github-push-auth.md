@@ -7,3 +7,5 @@ Pushes to GitHub use Replit's `GIT_ASKPASS` helper — there is no stored creden
 **Why:** The GitHub link is managed by the Replit Git pane, not by anything in the repo. Repo-side fixes (remotes, branches, gc) cannot resolve this error.
 
 **How to apply:** Ask the user to reconnect GitHub via the Replit Git pane; never store tokens manually in git config or remote URLs. The GitHub remote must be named `origin` for the Git pane to work; platform task agents historically left stale `subrepl-*` remotes/branches behind — if pushes break again, check `git remote | wc -l` first.
+
+Git remote configuration is per-environment and NOT part of a code merge — cleaning remotes inside an isolated task agent has zero effect on the main workspace. Remote repairs must run on the main agent. An empty output from `git ls-remote origin` with exit 0 just means the GitHub repo has no branches yet (auth/connectivity are fine).
