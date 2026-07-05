@@ -1,0 +1,120 @@
+# Builds the three service images and deploys them to Azure Container Apps.
+#
+# Required GitHub SECRETS (repo Settings -> Secrets and variables -> Actions):
+#   AZURE_CREDENTIALS           JSON output of:
+#                               az ad sp create-for-rbac --name fietsroute-deploy \
+#                                 --role contributor --scopes /subscriptions/<SUB_ID>/resourceGroups/<RG> \
+#                                 --sdk-auth
+#   CLERK_PUBLISHABLE_KEY       Clerk publishable key (baked into web + mobile bundles)
+#
+# Required GitHub VARIABLES:
+#   ACR_NAME                    Azure Container Registry name (without .azurecr.io)
+#   AZURE_RESOURCE_GROUP        Resource group containing the Container Apps
+#   API_APP_NAME                Container App name for the API server
+#   WEB_APP_NAME                Container App name for the web app (nginx entrypoint)
+#   MOBILE_APP_NAME             Container App name for the mobile static server
+#   PUBLIC_DOMAIN               Public domain of the web entrypoint, e.g.
+#                               fietsroute-web.<hash>.westeurope.azurecontainerapps.io
+#                               or your custom domain. Baked into the mobile bundles.
+#
+# See docs/azure/AZURE_DEPLOYMENT.md for the one-time Azure setup.
+
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: azure-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ${{ vars.ACR_NAME }}.azurecr.io
+  TAG: ${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push api-server
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: artifacts/api-server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/fietsroute-api:${{ env.TAG }}
+            ${{ env.REGISTRY }}/fietsroute-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build and push routeplanner web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: artifacts/routeplanner/Dockerfile
+          push: true
+          build-args: |
+            VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY }}
+            VITE_CLERK_PROXY_URL=/api/__clerk
+          tags: |
+            ${{ env.REGISTRY }}/fietsroute-web:${{ env.TAG }}
+            ${{ env.REGISTRY }}/fietsroute-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      # The mobile build runs Metro (Expo export) inside the image and bakes
+      # PUBLIC_DOMAIN into the bundles — expect this step to take ~10 minutes.
+      - name: Build and push mobile static server
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: artifacts/mobile/Dockerfile
+          push: true
+          build-args: |
+            PUBLIC_DOMAIN=${{ vars.PUBLIC_DOMAIN }}
+            BASE_PATH=/mobile
+            CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY }}
+            CLERK_PROXY_URL=/api/__clerk
+          tags: |
+            ${{ env.REGISTRY }}/fietsroute-mobile:${{ env.TAG }}
+            ${{ env.REGISTRY }}/fietsroute-mobile:latest
+          cache-from: type=gha,scope=mobile
+          cache-to: type=gha,scope=mobile,mode=max
+
+      - name: Deploy api-server
+        run: |
+          az containerapp update \
+            --name ${{ vars.API_APP_NAME }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/fietsroute-api:${{ env.TAG }}
+
+      - name: Deploy mobile static server
+        run: |
+          az containerapp update \
+            --name ${{ vars.MOBILE_APP_NAME }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/fietsroute-mobile:${{ env.TAG }}
+
+      - name: Deploy routeplanner web
+        run: |
+          az containerapp update \
+            --name ${{ vars.WEB_APP_NAME }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/fietsroute-web:${{ env.TAG }}

@@ -33,3 +33,4 @@
 - [Central 401 re-auth](central-401-reauth.md) — `setUnauthorizedHandler` in custom-fetch fires on any 401 before ApiError throws; the app handler now VERIFIES the session (see session-expiry-detection) before its toast/Alert prompt. Web shows re-auth toast, mobile Alert→sign-in; route state survives (provider above router).
 - [GitHub push auth](github-push-auth.md) — pushes auth via Replit GIT_ASKPASS; "Invalid username or token" means reconnect GitHub in the Git pane, never store tokens; Git pane needs remote named `origin`.
 - [Route draft persistence](route-draft-persistence.md) — web `Home` unmounts on forced sign-in redirect; useRoutePlanner autosaves route to sessionStorage keyed by userId, gate persist behind restore to avoid clobbering on remount.
+- [Azure deployment topology](azure-deployment.md) — /, /api, /mobile must share one public domain (nginx entrypoint path-routes); api dist is self-contained; mobile bundles bake the domain in at build.

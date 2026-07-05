@@ -1,0 +1,25 @@
+.git
+.local
+.cache
+.agents
+.github
+node_modules
+**/node_modules
+attached_assets
+zipFile.zip
+docs
+screenshots
+
+# Build outputs (regenerated inside the image)
+artifacts/api-server/dist
+artifacts/routeplanner/dist
+artifacts/mockup-sandbox/dist
+artifacts/mobile/static-build
+artifacts/mobile/.metro-cache
+lib/*/dist
+lib/*/tsconfig.tsbuildinfo
+scripts/tsconfig.tsbuildinfo
+
+*.log
+.env
+.env.*

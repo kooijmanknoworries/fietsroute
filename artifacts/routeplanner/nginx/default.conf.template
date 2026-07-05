@@ -1,0 +1,49 @@
+# Substituted at container start by the official nginx image entrypoint
+# (envsubst on ${API_ORIGIN} / ${MOBILE_ORIGIN} only — nginx runtime
+# variables like $host are untouched because they are not exported env vars).
+
+server {
+    listen 8080;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml font/ttf font/otf;
+    gzip_min_length 1024;
+
+    # API + Clerk frontend-API proxy (/api/__clerk lives under /api on the server)
+    location /api/ {
+        proxy_pass ${API_ORIGIN};
+        proxy_http_version 1.1;
+        proxy_ssl_server_name on;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+    }
+
+    # Expo static server for the mobile app (serve.js strips BASE_PATH=/mobile)
+    location /mobile {
+        proxy_pass ${MOBILE_ORIGIN};
+        proxy_http_version 1.1;
+        proxy_ssl_server_name on;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 300s;
+    }
+
+    # Hashed build assets are immutable
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
