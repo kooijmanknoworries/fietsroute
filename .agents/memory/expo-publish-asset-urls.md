@@ -11,4 +11,7 @@ description: Why published bundle asset URLs must be dot-segment-free and how th
 
 - **Verification regex intentionally ignores 4 raw `httpServerLocation` occurrences** in each bundle — they are Expo runtime resolver *code*, not asset metadata. Only entries with `hash`/`name`/`type` are real assets (~49 as of SDK 54).
 
+- **"New update available, downloading…" stuck with a small percentage counter = bundle transfer stalling on device.** The static server must gzip the Hermes bundle (~4x smaller) and set `cache-control: public, max-age=31536000, immutable` on timestamped build dirs — okhttp/Expo Go sends `Accept-Encoding: gzip` and serving 4+MB raw over slow mobile links stalls mid-download.
+  **How to apply:** serve.js gzips compressible extensions with an mtime-keyed cache and sets content-length + vary. Diagnose via request logs: manifest + bundle 200 but zero follow-up font/asset requests means the JS never executed on the device.
+
 - **Blank-screen defenses in the app shell:** root layout has a 5s font-load timeout (renders with system fonts instead of hanging on splash) and a `ClerkLoading` spinner; the static server logs every request (method/url/status/UA/expo-platform) so deployment logs show what a device actually fetched.

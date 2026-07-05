@@ -12,6 +12,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 
 const STATIC_ROOT = path.resolve(__dirname, "..", "static-build");
 const TEMPLATE_PATH = path.resolve(__dirname, "templates", "landing-page.html");
@@ -81,7 +82,26 @@ function serveLandingPage(req, res, landingPageTemplate, appName) {
   res.end(html);
 }
 
-function serveStaticFile(urlPath, res) {
+// Extensions worth gzipping. The Hermes JS bundle is ~4.3MB raw and ~1MB
+// gzipped — on slow mobile connections the uncompressed transfer can stall
+// mid-download in Expo Go ("downloading..." stuck at N%), so compression is
+// load-bearing here, not just an optimization.
+const COMPRESSIBLE = new Set([".js", ".json", ".html", ".css", ".svg", ".map", ".ttf", ".otf"]);
+
+// filePath -> { mtimeMs, gzipped } cache so repeated bundle downloads don't
+// re-compress. Build outputs are immutable per timestamp dir, so this stays
+// small (a handful of bundles/fonts per deployed build).
+const gzipCache = new Map();
+
+function getGzipped(filePath, content, mtimeMs) {
+  const cached = gzipCache.get(filePath);
+  if (cached && cached.mtimeMs === mtimeMs) return cached.gzipped;
+  const gzipped = zlib.gzipSync(content, { level: 6 });
+  gzipCache.set(filePath, { mtimeMs, gzipped });
+  return gzipped;
+}
+
+function serveStaticFile(req, urlPath, res) {
   const safePath = path.normalize(urlPath).replace(/^(\.\.(\/|\\|$))+/, "");
   const filePath = path.join(STATIC_ROOT, safePath);
 
@@ -91,7 +111,15 @@ function serveStaticFile(urlPath, res) {
     return;
   }
 
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+  let stat;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    res.writeHead(404);
+    res.end("Not Found");
+    return;
+  }
+  if (stat.isDirectory()) {
     res.writeHead(404);
     res.end("Not Found");
     return;
@@ -100,7 +128,30 @@ function serveStaticFile(urlPath, res) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || "application/octet-stream";
   const content = fs.readFileSync(filePath);
-  res.writeHead(200, { "content-type": contentType });
+
+  const headers = {
+    "content-type": contentType,
+    vary: "accept-encoding",
+  };
+
+  // Build outputs live under timestamped directories and never change —
+  // let clients and the proxy cache them so retries don't re-download.
+  if (/^\/\d+-\d+\//.test(safePath.startsWith("/") ? safePath : `/${safePath}`)) {
+    headers["cache-control"] = "public, max-age=31536000, immutable";
+  }
+
+  const acceptEncoding = String(req.headers["accept-encoding"] || "");
+  if (COMPRESSIBLE.has(ext) && /\bgzip\b/.test(acceptEncoding)) {
+    const gzipped = getGzipped(filePath, content, stat.mtimeMs);
+    headers["content-encoding"] = "gzip";
+    headers["content-length"] = gzipped.length;
+    res.writeHead(200, headers);
+    res.end(gzipped);
+    return;
+  }
+
+  headers["content-length"] = content.length;
+  res.writeHead(200, headers);
   res.end(content);
 }
 
@@ -135,7 +186,7 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  serveStaticFile(pathname, res);
+  serveStaticFile(req, pathname, res);
 });
 
 const port = parseInt(process.env.PORT || "3000", 10);
