@@ -40,7 +40,7 @@ Recommended Azure services:
 
 ```bash
 RG=fietsroute-rg
-LOC=westeurope
+LOC=northeurope             # see region note below
 ACR=fietsrouteacr            # must be globally unique
 ENV=fietsroute-env
 
@@ -53,10 +53,19 @@ az postgres flexible-server create --name fietsroute-pg --resource-group $RG \
   --location $LOC --tier Burstable --sku-name Standard_B1ms --storage-size 32 \
   --version 16 --database-name fietsroute
 # Allow Azure services to reach it (or configure VNet integration):
-az postgres flexible-server firewall-rule create --name fietsroute-pg \
-  --resource-group $RG --rule-name allow-azure \
+az postgres flexible-server firewall-rule create --server-name fietsroute-pg \
+  --resource-group $RG --name allow-azure \
   --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0
 ```
+
+> **Region note (verified during the test run):** some subscriptions cannot
+> create new Container Apps / Postgres capacity in `westeurope` (the request is
+> rejected). `northeurope` worked; pick any region your subscription has quota
+> in and keep all resources in the same one.
+>
+> **CLI note:** on current `az`, `firewall-rule` uses `--server-name` for the
+> server and `--name` for the rule (older syntax used `--name` for the server
+> and `--rule-name` for the rule).
 
 Create the three container apps (first deploy can use a placeholder image;
 the GitHub workflow updates them afterwards):
@@ -158,6 +167,17 @@ verified identical).
 2. **Download** `fietsroute.dump` from the workspace (Files pane → Download),
    or run the restore directly from the Replit shell if the Azure server's
    firewall allows your connection.
+
+   > **Note (verified during the test run):** Replit's outbound firewall blocks
+   > TCP 5432 (from the shell *and* from Docker containers), so the restore
+   > cannot run from the Replit workspace. Run it instead from any host with
+   > 5432 egress — Azure Cloud Shell, your laptop, or the included
+   > `.github/workflows/azure-db-restore.yml` GitHub Actions workflow. That
+   > workflow uploads the dump as a `db-migration-snapshot` release asset,
+   > opens the Postgres firewall to the runner IP, runs
+   > `scripts/azure/restore-azure-db.sh`, prints row counts, then removes the
+   > temporary firewall rule. It needs the extra secret `AZURE_DATABASE_URL`
+   > and variable `AZURE_PG_SERVER`.
 3. **Restore** into Azure (database `fietsroute` must exist):
    ```bash
    bash scripts/azure/restore-azure-db.sh \

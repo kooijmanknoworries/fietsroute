@@ -17,3 +17,10 @@ Other verified facts:
 - Vite build requires `PORT` and `BASE_PATH` env even for static builds (vite.config throws).
 - pg_dump/pg_restore migration tested: `-Fc --no-owner --no-privileges` dump, restore with `--clean --if-exists`; `CREATE DATABASE` works on the Replit-managed PG for scratch restore tests. Use exact counts (`query_to_xml` trick) for verification — `pg_stat_user_tables.n_live_tup` can be badly stale (showed 0 for a 394k-row table).
 - Mobile image build runs the same `scripts/build.js` Metro export used for Replit publishing, with `EXPO_PUBLIC_DOMAIN`/`BASE_PATH`/`CLERK_*` as build args; domain is baked in, so domain changes require an image rebuild.
+
+Verified in a full live deploy (real Azure infra, pipeline green, all 3 endpoints served):
+- **Region:** a subscription may reject new Container Apps/Postgres capacity in `westeurope`; `northeurope` accepted. Pick a region with quota, keep everything in it.
+- **DB restore cannot run from Replit:** outbound TCP 5432 is firewalled from the Replit shell AND from Docker containers. Restore from a host with 5432 egress. The committed `.github/workflows/azure-db-restore.yml` does it from a GH runner (uploads dump as a `db-migration-snapshot` release asset, opens PG firewall to runner IP, runs restore-azure-db.sh, closes rule). Delete that release afterward — the dump contains user_access Clerk ids.
+- **az firewall-rule flags differ by version:** current az uses `--server-name <server>` + `--name <rule>`; older used `--name <server>` + `--rule-name <rule>`.
+- **ACR pull:** the deploy SP (Contributor) can't self-assign AcrPull role, so container apps were wired with ACR admin registry creds instead of managed-identity role.
+- **API needs restore before it serves data:** api-server does not create schema at boot; if it starts against an empty DB, restart the revision after the restore completes. Data endpoints (e.g. `/api/network/status`) require Clerk auth so return 401 unauthenticated — that 401 is proof the API + auth layer is live; `/api/healthz` (no auth) is the liveness check.
