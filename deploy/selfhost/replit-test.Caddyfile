@@ -1,0 +1,5 @@
+# Used only by replit-test.override.yml (host-network smoke test).
+{$SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy 127.0.0.1:55080
+}

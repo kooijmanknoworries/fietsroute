@@ -10,7 +10,7 @@ map $http_x_forwarded_proto $fwd_proto {
 }
 
 server {
-    listen 8080;
+    listen 55080;
     server_name _;
 
     root /usr/share/nginx/html;

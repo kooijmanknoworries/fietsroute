@@ -1,0 +1,54 @@
+# FOR SMOKE-TESTING INSIDE THE REPLIT WORKSPACE ONLY — do not use on a real host.
+#
+# The Replit sandbox blocks all container-to-container bridge traffic and
+# `docker exec` (so in-container healthchecks always fail). This override puts
+# every service on the HOST network with distinct ports so the stack can be
+# smoke-tested end-to-end:
+#
+#   alias dc='docker compose -f docker-compose.yml -f replit-test.override.yml'
+#   dc up -d postgres
+#   dc run --rm --no-deps migrate
+#   dc up -d --no-deps api-server mobile web caddy
+#   curl http://localhost:55090/            # web app via caddy
+#   curl http://localhost:55090/api/healthz # api via caddy -> nginx -> api
+#   curl http://localhost:55090/mobile      # QR landing page
+#   curl -H "expo-platform: ios" http://localhost:55090/mobile/manifest  # Expo manifest
+#
+# On a real Docker host, use docker-compose.yml alone.
+
+services:
+  postgres:
+    network_mode: host
+    command: ["postgres", "-p", "55433"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -p 55433 -U ${POSTGRES_USER:-fietsroute} -d ${POSTGRES_DB:-fietsroute}"]
+  migrate:
+    network_mode: host
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fietsroute}:${POSTGRES_PASSWORD}@127.0.0.1:55433/${POSTGRES_DB:-fietsroute}
+  api-server:
+    network_mode: host
+    environment:
+      PORT: "55081"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fietsroute}:${POSTGRES_PASSWORD}@127.0.0.1:55433/${POSTGRES_DB:-fietsroute}
+  mobile:
+    network_mode: host
+    environment:
+      PORT: "55082"
+  web:
+    network_mode: host
+    environment:
+      API_ORIGIN: http://127.0.0.1:55081
+      MOBILE_ORIGIN: http://127.0.0.1:55082
+    volumes:
+      # listens on 55080 instead of 8080 (8080 is taken on the docker host)
+      - ./replit-test.nginx.template:/etc/nginx/templates/default.conf.template:ro
+  caddy:
+    network_mode: host
+    ports: !override []
+    environment:
+      SITE_ADDRESS: ":55090"
+    volumes:
+      - ./replit-test.Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
