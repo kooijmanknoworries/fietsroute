@@ -33,7 +33,10 @@ RUN pnpm install --frozen-lockfile --filter "@workspace/mobile..."
 ARG PUBLIC_DOMAIN
 ARG BASE_PATH=/mobile
 ARG CLERK_PUBLISHABLE_KEY=""
-ARG CLERK_PROXY_URL="/api/__clerk"
+# Default OFF: empty = talk directly to the Clerk frontend API (works with dev
+# instances). Set to /api/__clerk only for a production instance behind a custom
+# domain that proxies the Clerk frontend API.
+ARG CLERK_PROXY_URL=""
 RUN test -n "$PUBLIC_DOMAIN" || { echo "ERROR: PUBLIC_DOMAIN build arg is required"; exit 1; }
 ENV EXPO_PUBLIC_DOMAIN=$PUBLIC_DOMAIN \
     BASE_PATH=$BASE_PATH \

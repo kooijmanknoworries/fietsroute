@@ -25,7 +25,10 @@ WORKDIR /app
 COPY . .
 RUN pnpm install --frozen-lockfile --filter "@workspace/routeplanner..."
 ARG VITE_CLERK_PUBLISHABLE_KEY=""
-ARG VITE_CLERK_PROXY_URL="/api/__clerk"
+# Default OFF: empty = talk directly to the Clerk frontend API (works with dev
+# instances on any domain). Set to /api/__clerk only for a production instance
+# behind a custom domain that proxies the Clerk frontend API.
+ARG VITE_CLERK_PROXY_URL=""
 # BASE_PATH and PORT are required by vite.config.ts even for a static build.
 ENV NODE_ENV=production \
     BASE_PATH=/ \
