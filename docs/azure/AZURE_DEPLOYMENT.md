@@ -132,7 +132,7 @@ Secrets **cannot be exported from Replit** — re-enter the values in Azure.
 | When | Variable | Notes |
 |---|---|---|
 | build arg | `VITE_CLERK_PUBLISHABLE_KEY` | baked into JS bundle |
-| build arg | `VITE_CLERK_PROXY_URL` | default `/api/__clerk` |
+| build arg | `VITE_CLERK_PROXY_URL` | from `CLERK_PROXY_URL` var; empty = dev instance (no proxy), `/api/__clerk` = production instance behind a custom domain |
 | runtime | `API_ORIGIN` | internal FQDN of fietsroute-api (https) |
 | runtime | `MOBILE_ORIGIN` | internal FQDN of fietsroute-mobile (https) |
 
@@ -142,13 +142,26 @@ Secrets **cannot be exported from Replit** — re-enter the values in Azure.
 | build arg | `PUBLIC_DOMAIN` | public domain of fietsroute-web — baked into bundles |
 | build arg | `BASE_PATH` | `/mobile` |
 | build arg | `CLERK_PUBLISHABLE_KEY` | baked into the app bundle |
-| build arg | `CLERK_PROXY_URL` | default `/api/__clerk` |
+| build arg | `CLERK_PROXY_URL` | from `CLERK_PROXY_URL` var; empty = dev instance (no proxy), `/api/__clerk` = production instance behind a custom domain |
 | runtime | `PORT`, `BASE_PATH` | `8080`, `/mobile` |
 
 ### GitHub Actions (repo settings)
 Secrets: `AZURE_CREDENTIALS` (service principal JSON), `CLERK_PUBLISHABLE_KEY`.
 Variables: `ACR_NAME`, `AZURE_RESOURCE_GROUP`, `API_APP_NAME`, `WEB_APP_NAME`,
-`MOBILE_APP_NAME`, `PUBLIC_DOMAIN`.
+`MOBILE_APP_NAME`, `PUBLIC_DOMAIN`, `CLERK_PROXY_URL`.
+
+`CLERK_PROXY_URL` selects the Clerk instance mode for both the web and mobile
+image builds:
+- **Leave it unset/empty** to build against a Clerk **development** instance.
+  Proxy mode is off, so the clients talk directly to the `*.clerk.accounts.dev`
+  frontend API resolved from the publishable key. This is the only path that
+  works on the auto-generated `*.azurecontainerapps.io` hostname, because Clerk
+  rejects that shared platform root domain for production instances. Use it to
+  validate the Azure deploy without buying a custom domain.
+- **Set it to `/api/__clerk`** to build against a Clerk **production** instance
+  bound to a custom domain you own. Proxy mode is on and the api-server proxies
+  the Clerk frontend API at that path. Switching back and forth is just a
+  variable change — no YAML edits required.
 
 Grant the service principal ACR push rights:
 `az role assignment create --assignee <sp-appId> --role AcrPush --scope $(az acr show -n $ACR --query id -o tsv)`
