@@ -72,23 +72,6 @@ function lastFixHandler() {
   }) => void;
 }
 
-// The hook's plausible-speed gate compares along-route progress against the
-// wall-clock time between fixes, so tests advance a mocked Date.now between
-// fixes instead of really waiting.
-let clockOffsetMs = 0;
-const realNow = Date.now;
-function advanceClock(seconds: number) {
-  clockOffsetMs += seconds * 1000;
-}
-
-// Drive the whole (single-leg, ~1.3 km) route with plausible fixes: baseline
-// at the start node, then the end node a couple of minutes later.
-async function driveToEnd(result: Result) {
-  await pushFix(result, 52.0, 5.0);
-  advanceClock(240);
-  await pushFix(result, 52.01, 5.01);
-}
-
 async function pushFix(result: Result, lat: number, lon: number) {
   const handler = lastFixHandler();
   await act(async () => {
@@ -105,11 +88,33 @@ async function stopRide(result: Result) {
   });
 }
 
+// Controllable wall clock for the plausible-speed gate: real timers keep
+// running (startRide awaits a real setTimeout), but Date.now is ours.
+let nowMs = 0;
+function advanceClock(seconds: number) {
+  nowMs += seconds * 1000;
+}
+
+// Drive continuously from NODE_A towards NODE_B in ~65 m steps (t += 0.05)
+// with 10 s between fixes (~6.5 m/s): plausible speed AND contiguous coverage.
+async function driveLeg(result: Result, fromT: number, toT: number) {
+  for (let t = fromT + 0.05; t <= toT + 1e-9; t += 0.05) {
+    advanceClock(10);
+    await pushFix(result, 52.0 + 0.01 * t, 5.0 + 0.01 * t);
+  }
+}
+
+// Full ride: baseline at the start node, then contiguous fixes to the end.
+async function driveToEnd(result: Result) {
+  await pushFix(result, 52.0, 5.0);
+  await driveLeg(result, 0, 1);
+}
+
 beforeEach(() => {
-  clockOffsetMs = 0;
-  vi.spyOn(Date, "now").mockImplementation(() => realNow() + clockOffsetMs);
   apiState.history = [];
   apiState.mutate.mockReset();
+  nowMs = 1_751_900_000_000;
+  vi.spyOn(Date, "now").mockImplementation(() => nowMs);
   vi.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue({
     status: Location.PermissionStatus.GRANTED,
   } as never);
@@ -120,7 +125,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.restoreAllMocks(); // un-spy Date.now
+  vi.clearAllMocks(); // clear module-mock call history
 });
 
 function mount(isSignedIn: boolean) {
@@ -153,7 +159,7 @@ describe("useRide", () => {
     expect(result.current.gpsError).toBeNull();
     expect(Location.watchPositionAsync).toHaveBeenCalled();
 
-    // Riding from the start node to the end node completes the single leg.
+    // Riding the leg continuously from start to end completes it.
     await driveToEnd(result);
     expect(result.current.progressMeters).toBeGreaterThan(0);
 
@@ -180,6 +186,49 @@ describe("useRide", () => {
     const summary = result.current.rideSummary;
     expect(summary!.newSegments).toBe(0);
     expect(summary!.totalSegments).toBe(1);
+  });
+
+  it("does not unlock a leg when the ride starts mid-leg", async () => {
+    const { result } = mount(true);
+    await startRide(result);
+
+    // Baseline lands halfway along the leg; ride continuously to the end.
+    await pushFix(result, 52.005, 5.005);
+    await driveLeg(result, 0.5, 1);
+    await stopRide(result);
+
+    expect(result.current.rideSummary!.newSegments).toBe(0);
+    expect(apiState.mutate).not.toHaveBeenCalled();
+  });
+
+  it("does not unlock a leg skipped by a speed-plausible snap-ahead", async () => {
+    const { result } = mount(true);
+    await startRide(result);
+
+    // Baseline at the start, then a long pause and a fix near the end:
+    // plausible speed-wise, but the stretch in between was never ridden.
+    await pushFix(result, 52.0, 5.0);
+    advanceClock(1800);
+    await pushFix(result, 52.0095, 5.0095);
+    await driveLeg(result, 0.95, 1);
+    await stopRide(result);
+
+    expect(result.current.rideSummary!.newSegments).toBe(0);
+    expect(apiState.mutate).not.toHaveBeenCalled();
+  });
+
+  it("rejects an implausible teleport along the route", async () => {
+    const { result } = mount(true);
+    await startRide(result);
+
+    await pushFix(result, 52.0, 5.0); // baseline
+    advanceClock(5);
+    await pushFix(result, 52.01, 5.01); // ~1.3 km in 5 s: impossible
+    await stopRide(result);
+
+    expect(result.current.rideSummary!.newSegments).toBe(0);
+    expect(result.current.rideSummary!.distanceMeters).toBe(0);
+    expect(apiState.mutate).not.toHaveBeenCalled();
   });
 
   it("marks the summary as signed-out and skips persistence when not signed in", async () => {

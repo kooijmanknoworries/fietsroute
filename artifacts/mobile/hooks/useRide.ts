@@ -11,6 +11,7 @@ import type { NetworkNode, RoutePlan } from "@/context/RoutePlannerContext";
 import {
   legSegments,
   snapToRoute,
+  RouteCoverage,
   type LegSegment,
   type LngLat,
 } from "@/lib/ride-geo";
@@ -128,6 +129,10 @@ export function useRide({
   const routeProgressRef = useRef(0);
   // Timestamp (ms) of the last accepted fix, for the plausible-speed gate.
   const lastFixTimeRef = useRef<number | null>(null);
+  // Which stretches of the route were continuously ridden this session. A leg
+  // only unlocks when coverage spans it start-to-end: joining mid-leg or
+  // jumping over a stretch never credits the un-ridden part.
+  const coverageRef = useRef(new RouteCoverage());
 
   const routeCoords = routePlan?.coordinates ?? null;
   const totalMeters = routePlan?.distanceMeters ?? 0;
@@ -212,6 +217,7 @@ export function useRide({
         startProgressRef.current = snap.distanceAlong;
         routeProgressRef.current = snap.distanceAlong;
         lastFixTimeRef.current = now;
+        coverageRef.current.markAt(snap.distanceAlong);
         setRidePosition(snap.snapped);
         setRouteProgressMeters(snap.distanceAlong);
         setProgressMeters(0);
@@ -235,6 +241,7 @@ export function useRide({
 
       setRidePosition(snap.snapped);
       if (delta > 0) {
+        coverageRef.current.advance(prevProgress, snap.distanceAlong);
         routeProgressRef.current = snap.distanceAlong;
         lastFixTimeRef.current = now;
       }
@@ -243,17 +250,23 @@ export function useRide({
       setRouteProgressMeters(routeProgress);
       setProgressMeters(Math.max(0, routeProgress - startProgress));
 
-      // Latch any legs whose end has been reached (monotonic — never un-mark).
-      // Segments that ended before the rider's starting point are never
-      // credited: they weren't ridden this session.
+      // Latch legs whose full extent has been continuously covered by accepted
+      // fixes (monotonic — never un-mark). Joining a leg mid-way or skipping a
+      // stretch (shortcut, snap-ahead, GPS gap) never credits that leg.
+      const coverage = coverageRef.current;
       const newlyDone: LockPoint[] = [];
       setRideCompleted((prev) => {
         let changed = false;
         const next = new Map(prev);
         for (const seg of segments) {
           if (next.has(seg.segmentKey)) continue;
-          if (seg.endDistance <= startProgress) continue;
-          if (routeProgress >= seg.endDistance - COMPLETE_TOLERANCE_M) {
+          if (
+            coverage.covers(
+              seg.startDistance,
+              seg.endDistance,
+              COMPLETE_TOLERANCE_M,
+            )
+          ) {
             const point: LockPoint = {
               key: seg.segmentKey,
               lon: seg.midpoint[0],
@@ -292,6 +305,7 @@ export function useRide({
     startProgressRef.current = null;
     routeProgressRef.current = 0;
     lastFixTimeRef.current = null;
+    coverageRef.current = new RouteCoverage();
     setRidePosition(null);
     setGpsError(null);
     setIsRiding(true);
@@ -384,6 +398,7 @@ export function useRide({
     startProgressRef.current = null;
     routeProgressRef.current = 0;
     lastFixTimeRef.current = null;
+    coverageRef.current = new RouteCoverage();
     setRideCompleted(new Map());
     savedKeysRef.current = new Set();
     setRideSummary(null);

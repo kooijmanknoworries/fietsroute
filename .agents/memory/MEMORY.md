@@ -22,6 +22,7 @@
 - [Resumable network import](resumable-network-import.md) — chunks marked `import-chunk:` in `overpass_cache`; prune only on clean runs; 10-min loop self-heals incomplete datasets.
 - [Network dataset freshness](network-dataset-freshness.md) — rolling refresh re-imports oldest chunk on a STALE_MS/chunk cadence; `GET /api/network/status` shows age/coverage; 0 markers ≠ empty dataset.
 - [Ride tracking](ride-tracking.md) — MapLibre icons must be raw ImageData not canvas (jsdom has no 2D ctx); segment id = sorted OSM node-id pair; history persist gated to signed-in.
+- [Ride leg coverage](ride-leg-coverage.md) — legs unlock only via continuous GPS coverage start-to-end (gap >150 m breaks it); ride tests must drive small-step fixes; keep the two ride-geo.ts copies identical.
 - [Mobile map web shim](mobile-map-web-shim.md) — mobile map on web = Leaflet DOM-tile shim for react-native-maps (no WebGL); runTest can't reach it, verify with screenshot app_preview.
 - [Expo Go publish asset URLs](expo-publish-asset-urls.md) — Expo Go fetches `httpServerLocation` verbatim; publish build must emit dot-segment-free asset URLs + verify files exist on disk.
 - [Routeplanner mobile layout](routeplanner-mobile-layout.md) — mobile panel needs >= half viewport so Start ride is reachable; top-right map overlay group must wrap (max-w) to avoid colliding with the left recenter button.

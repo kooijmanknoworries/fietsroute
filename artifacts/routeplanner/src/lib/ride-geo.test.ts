@@ -7,6 +7,8 @@ import {
   midpointOf,
   segmentKeyFor,
   legSegments,
+  RouteCoverage,
+  COVERAGE_GAP_M,
   type LngLat,
 } from "./ride-geo";
 
@@ -96,6 +98,49 @@ describe("midpointOf", () => {
   });
 });
 
+describe("RouteCoverage", () => {
+  it("covers a leg after contiguous small advances span it", () => {
+    const c = new RouteCoverage();
+    c.markAt(0);
+    for (let d = 0; d < 1000; d += 100) c.advance(d, d + 100);
+    expect(c.covers(0, 1000, 20)).toBe(true);
+  });
+
+  it("does not cover a leg entered mid-way", () => {
+    const c = new RouteCoverage();
+    c.markAt(500);
+    for (let d = 500; d < 1000; d += 100) c.advance(d, d + 100);
+    expect(c.covers(0, 1000, 20)).toBe(false);
+    // But the next leg, ridden fully, is covered.
+    for (let d = 1000; d < 2000; d += 100) c.advance(d, d + 100);
+    expect(c.covers(1000, 2000, 20)).toBe(true);
+  });
+
+  it("breaks continuity on an advance larger than the gap limit", () => {
+    const c = new RouteCoverage();
+    c.markAt(0);
+    c.advance(0, 100);
+    c.advance(100, 100 + COVERAGE_GAP_M + 1); // skipped stretch
+    c.advance(100 + COVERAGE_GAP_M + 1, 1000);
+    expect(c.covers(0, 1000, 20)).toBe(false);
+  });
+
+  it("allows tolerance slack at both ends", () => {
+    const c = new RouteCoverage();
+    c.markAt(15);
+    for (let d = 15; d < 990; d += 100) c.advance(d, Math.min(d + 100, 990));
+    expect(c.covers(0, 1000, 20)).toBe(true);
+    expect(c.covers(0, 1000, 5)).toBe(false);
+  });
+
+  it("treats a degenerate short leg as covered by any overlap", () => {
+    const c = new RouteCoverage();
+    c.markAt(10);
+    c.advance(10, 20);
+    expect(c.covers(5, 25, 20)).toBe(true);
+  });
+});
+
 describe("segmentKeyFor", () => {
   it("is order-independent", () => {
     expect(segmentKeyFor("200", "100")).toBe(segmentKeyFor("100", "200"));
@@ -120,6 +165,9 @@ describe("legSegments", () => {
     expect(segs[1].segmentKey).toBe(segmentKeyFor("n2", "n3"));
     expect(segs[1].endDistance).toBeCloseTo(polylineLength(ROUTE), 3);
     expect(segs[0].endDistance).toBeLessThan(segs[1].endDistance);
+    // Each leg spans [startDistance, endDistance], back to back.
+    expect(segs[0].startDistance).toBe(0);
+    expect(segs[1].startDistance).toBeCloseTo(segs[0].endDistance, 6);
   });
 
   it("falls back to refs when node ids are missing", () => {

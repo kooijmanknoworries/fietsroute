@@ -164,10 +164,80 @@ export interface LegSegment {
   segmentKey: string;
   fromRef: string;
   toRef: string;
+  /** Cumulative distance (metres) along the full route at the leg's start. */
+  startDistance: number;
   /** Cumulative distance (metres) along the full route at the leg's end. */
   endDistance: number;
   /** Representative point for the lock marker (leg midpoint). */
   midpoint: LngLat;
+}
+
+// Two consecutive accepted fixes further apart than this along the route are
+// not treated as continuous coverage: the rider may have cut a corner, lost
+// GPS for a stretch, or a fix snapped ahead. Distance/progress may still
+// advance (if the jump is speed-plausible), but the skipped stretch is never
+// considered ridden. Cycling GPS fixes arrive every ~2 s / ~5 m, so genuine
+// riding produces steps far below this.
+export const COVERAGE_GAP_M = 150;
+
+/**
+ * Tracks which stretches of the planned route have been continuously covered
+ * by accepted GPS fixes. A leg only counts as ridden when a single contiguous
+ * covered interval spans it from (near) its start to (near) its end — joining
+ * a leg halfway or jumping over part of it never completes that leg.
+ */
+export class RouteCoverage {
+  private intervals: Array<{ start: number; end: number }> = [];
+
+  /** Seed coverage at a single point (the ride's first accepted fix). */
+  markAt(distance: number): void {
+    this.add(distance, distance);
+  }
+
+  /**
+   * Record an accepted advance from `from` to `to` metres along the route.
+   * Steps larger than COVERAGE_GAP_M break continuity: only the arrival point
+   * is marked, so the skipped stretch stays uncovered.
+   */
+  advance(from: number, to: number): void {
+    if (to < from) return;
+    if (to - from > COVERAGE_GAP_M) {
+      this.add(to, to);
+      return;
+    }
+    this.add(from, to);
+  }
+
+  /**
+   * Whether a contiguous covered interval spans [start, end], allowing
+   * `tolerance` metres of slack at each end (GPS jitter around knooppunten).
+   */
+  covers(start: number, end: number, tolerance: number): boolean {
+    const s = start + tolerance;
+    const e = end - tolerance;
+    if (e <= s) {
+      // Degenerate (very short) leg: any overlap counts.
+      return this.intervals.some((i) => i.start <= end && i.end >= start);
+    }
+    return this.intervals.some((i) => i.start <= s && i.end >= e);
+  }
+
+  private add(start: number, end: number): void {
+    const merged: Array<{ start: number; end: number }> = [];
+    let s = start;
+    let e = end;
+    for (const i of this.intervals) {
+      if (i.end < s || i.start > e) {
+        merged.push(i);
+      } else {
+        s = Math.min(s, i.start);
+        e = Math.max(e, i.end);
+      }
+    }
+    merged.push({ start: s, end: e });
+    merged.sort((a, b) => a.start - b.start);
+    this.intervals = merged;
+  }
 }
 
 /**
@@ -195,6 +265,7 @@ export function legSegments(
   for (let i = 0; i < legs.length; i++) {
     const leg = legs[i];
     const coords = leg.coordinates as LngLat[];
+    const startDistance = cumulative;
     cumulative += polylineLength(coords);
 
     const fromId = nodes[i]?.id ?? leg.fromRef;
@@ -204,6 +275,7 @@ export function legSegments(
       segmentKey: segmentKeyFor(fromId, toId),
       fromRef: leg.fromRef,
       toRef: leg.toRef,
+      startDistance,
       endDistance: cumulative,
       midpoint: midpointOf(coords),
     });

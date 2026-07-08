@@ -63,14 +63,22 @@ function advanceClock(seconds: number) {
   vi.setSystemTime(new Date(Date.now() + seconds * 1000));
 }
 
-// Drive the whole route with plausible fixes: baseline at the start, then
-// enough wall-clock time between fixes for the covered distance.
+// Drive continuously between two longitudes in ~111 m steps (0.001°) with
+// 15 s between fixes (~27 km/h): plausible speed AND contiguous coverage, so
+// legs genuinely ridden end-to-end unlock.
+function drive(fromLon: number, toLon: number) {
+  const step = 0.001;
+  for (let lon = fromLon + step; lon <= toLon + 1e-9; lon += step) {
+    advanceClock(15);
+    fix(Number(lon.toFixed(6)), 0);
+  }
+}
+
+// Drive the whole route with plausible, contiguous fixes: baseline at the
+// start, then small steps to the end (~50 min for ~22.3 km).
 function driveToEnd() {
   fix(0, 0); // baseline: progress starts at zero here
-  advanceClock(1800); // 30 min for ~11.1 km — a plausible cycling pace
-  fix(0.1, 0);
-  advanceClock(1800);
-  fix(0.2, 0);
+  drive(0, 0.2);
 }
 
 beforeEach(() => {
@@ -163,6 +171,60 @@ describe("useRide GPS gating", () => {
     fix(0.01, 0); // ~1.1 km in 2 min ≈ 33 km/h: plausible
     expect(result.current.progressMeters).toBeGreaterThan(1000);
     expect(result.current.progressMeters).toBeLessThan(1300);
+  });
+
+  it("does not unlock a leg when the ride starts mid-leg", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    // Baseline lands halfway through leg 1; ride continuously to the end.
+    fix(0.05, 0);
+    drive(0.05, 0.2);
+    act(() => result.current.stopRide());
+
+    // Leg 1 (n1__n2) was only half ridden: no lock. Leg 2 was ridden fully.
+    expect(result.current.lockPoints.map((p) => p.key)).toEqual(["n2__n3"]);
+    expect(result.current.rideSummary?.newSegments).toBe(1);
+  });
+
+  it("never unlocks legs skipped by a speed-plausible snap-ahead", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    fix(0, 0); // baseline at the route start
+    drive(0, 0.05); // ride half of leg 1 for real
+    // Long pause, then a fix far ahead: plausible speed-wise (slow enough over
+    // an hour) but the stretch in between was never ridden.
+    advanceClock(3600);
+    fix(0.15, 0);
+    drive(0.15, 0.2); // ride the rest of leg 2 continuously
+    act(() => result.current.stopRide());
+
+    // Neither leg was covered end-to-end: no locks at all.
+    expect(result.current.lockPoints).toEqual([]);
+    expect(result.current.rideSummary?.newSegments).toBe(0);
+    expect(apiState.save.mutate).not.toHaveBeenCalled();
+  });
+
+  it("still unlocks every leg on a clean full ride", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    driveToEnd();
+
+    expect(result.current.lockPoints.map((p) => p.key).sort()).toEqual([
+      "n1__n2",
+      "n2__n3",
+    ]);
   });
 
   it("never decreases progress on a backwards fix", () => {
@@ -262,13 +324,13 @@ describe("useRide end-of-ride summary", () => {
     );
 
     act(() => result.current.startRide());
-    driveToEnd(); // advances the clock exactly 3600 s
+    driveToEnd(); // 200 steps × 15 s = 3000 s
     act(() => result.current.stopRide());
 
     const summary = result.current.rideSummary;
-    expect(summary?.durationSeconds).toBeCloseTo(3600, 0);
-    // ~22.3 km over 1 hour → ~22.3 km/h.
-    const expectedKmh = summary!.distanceMeters / 1000 / 1;
+    expect(summary?.durationSeconds).toBeCloseTo(3000, 0);
+    const expectedKmh =
+      summary!.distanceMeters / 1000 / (summary!.durationSeconds / 3600);
     expect(summary?.avgSpeedKmh).toBeCloseTo(expectedKmh, 1);
   });
 
