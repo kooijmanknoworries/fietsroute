@@ -20,6 +20,17 @@ const apiState = vi.hoisted(() => ({
 
 vi.mock("@workspace/api-client-react", () => ({
   planRoute: (...args: unknown[]) => apiState.planRoute(...args),
+  getElevationProfile: vi.fn(async () => ({
+    points: [
+      { distanceMeters: 0, elevationMeters: 10 },
+      { distanceMeters: 1000, elevationMeters: 20 },
+    ],
+    ascentMeters: 10,
+    descentMeters: 0,
+    minElevationMeters: 10,
+    maxElevationMeters: 20,
+    totalDistanceMeters: 1000,
+  })),
   useSaveRoute: () => ({ mutateAsync: vi.fn() }),
   getListSavedRoutesQueryKey: () => ["listSavedRoutes"],
   useSaveVisitedSegments: () => ({ mutate: vi.fn() }),

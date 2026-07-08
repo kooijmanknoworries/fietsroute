@@ -84,6 +84,13 @@ const en = {
   "route.saveRoute": "Save route",
   "route.nodesCount": "{count} nodes",
 
+  "elevation.title": "Elevation profile",
+  "elevation.ascent": "Climb",
+  "elevation.highest": "Highest",
+  "elevation.lowest": "Lowest",
+  "elevation.loading": "Loading elevation profile…",
+  "elevation.error": "Could not load the elevation profile.",
+
   "ride.start": "Start ride",
   "ride.stop": "Stop ride",
   "ride.riding": "Ride in progress",
@@ -235,6 +242,14 @@ const nl: Record<TranslationKey, string> = {
   "route.errorTitle": "Routefout",
   "route.totalDistance": "Totale afstand:",
   "route.saveRoute": "Route opslaan",
+
+  "elevation.title": "Hoogteprofiel",
+  "elevation.ascent": "Klimmen",
+  "elevation.highest": "Hoogste punt",
+  "elevation.lowest": "Laagste punt",
+  "elevation.loading": "Hoogteprofiel laden…",
+  "elevation.error": "Kon het hoogteprofiel niet laden.",
+
   "ride.start": "Rit starten",
   "ride.stop": "Rit stoppen",
   "ride.riding": "Rit bezig",

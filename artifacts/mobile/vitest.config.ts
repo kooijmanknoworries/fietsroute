@@ -42,6 +42,10 @@ export default defineConfig({
         find: /^expo-router$/,
         replacement: path.resolve(dir, "test/mocks/expo-router.tsx"),
       },
+      {
+        find: /^react-native-svg$/,
+        replacement: path.resolve(dir, "test/mocks/react-native-svg.tsx"),
+      },
       // react-native -> react-native-web so primitives render to the DOM.
       { find: /^react-native$/, replacement: "react-native-web" },
       // Path alias used across the app.

@@ -88,6 +88,28 @@ export const PlanRouteResponse = zod.object({
 
 
 /**
+ * Given a route geometry as ordered [lon, lat] pairs, samples the route and returns elevations along it plus summary statistics (total ascent, descent, highest and lowest points).
+
+ * @summary Get an elevation profile for a route geometry
+ */
+export const GetElevationProfileBody = zod.object({
+  "coordinates": zod.array(zod.array(zod.number())).describe('Route geometry as ordered [lon, lat] pairs.')
+})
+
+export const GetElevationProfileResponse = zod.object({
+  "points": zod.array(zod.object({
+  "distanceMeters": zod.number().describe('Cumulative distance from the start of the route.'),
+  "elevationMeters": zod.number().describe('Elevation above sea level at this point.')
+})),
+  "ascentMeters": zod.number().describe('Total climbing over the route.'),
+  "descentMeters": zod.number().describe('Total descending over the route.'),
+  "minElevationMeters": zod.number().describe('Lowest point on the route.'),
+  "maxElevationMeters": zod.number().describe('Highest point on the route.'),
+  "totalDistanceMeters": zod.number()
+})
+
+
+/**
  * A curated list of popular cycling regions to jump the map to.
  * @summary Get quick-jump regions
  */

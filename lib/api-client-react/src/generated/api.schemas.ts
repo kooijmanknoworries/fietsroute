@@ -109,6 +109,31 @@ export interface RoutePlan {
   legs: RouteLeg[];
 }
 
+export interface ElevationProfileRequest {
+  /** Route geometry as ordered [lon, lat] pairs. */
+  coordinates: number[][];
+}
+
+export interface ElevationPoint {
+  /** Cumulative distance from the start of the route. */
+  distanceMeters: number;
+  /** Elevation above sea level at this point. */
+  elevationMeters: number;
+}
+
+export interface ElevationProfileResult {
+  points: ElevationPoint[];
+  /** Total climbing over the route. */
+  ascentMeters: number;
+  /** Total descending over the route. */
+  descentMeters: number;
+  /** Lowest point on the route. */
+  minElevationMeters: number;
+  /** Highest point on the route. */
+  maxElevationMeters: number;
+  totalDistanceMeters: number;
+}
+
 export interface UpdateSavedRouteRequest {
   /** New user-provided name for the route. */
   name: string;

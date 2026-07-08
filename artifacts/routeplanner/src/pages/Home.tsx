@@ -64,6 +64,7 @@ import { useRoutePlanner } from "@/hooks/use-route-planner";
 import { useRide } from "@/hooks/use-ride";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
+import ElevationProfile from "@/components/ElevationProfile";
 import { useI18n } from "@/lib/i18n";
 
 export default function Home() {
@@ -584,6 +585,9 @@ export default function Home() {
                       <span className="text-muted-foreground font-medium">{t("route.totalDistance")}</span>
                       <span className="font-bold text-lg text-foreground">{formatDistance(routePlan.distanceMeters)}</span>
                     </div>
+                    {routePlan.coordinates.length >= 2 && (
+                      <ElevationProfile coordinates={routePlan.coordinates} />
+                    )}
                     <Button
                       size="sm"
                       className="w-full"

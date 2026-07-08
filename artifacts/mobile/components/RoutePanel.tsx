@@ -20,6 +20,7 @@ import { useRoutePlanner } from "@/context/RoutePlannerContext";
 import { useRideContext } from "@/context/RideContext";
 import { useAccessStatus } from "@/hooks/useAccessStatus";
 import SaveRouteModal from "@/components/SaveRouteModal";
+import ElevationProfile from "@/components/ElevationProfile";
 
 function formatDistance(meters: number): string {
   if (meters >= 1000) {
@@ -180,6 +181,10 @@ export default function RoutePanel() {
             {selectedNodes.length} knooppunten · {routePlan.legs.length} etappe{routePlan.legs.length !== 1 ? "s" : ""}
           </Text>
         </View>
+      )}
+
+      {selectedNodes.length >= 2 && routePlan && routePlan.coordinates.length >= 2 && (
+        <ElevationProfile coordinates={routePlan.coordinates} />
       )}
 
       {writeBlocked && (

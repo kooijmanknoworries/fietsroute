@@ -23,6 +23,8 @@ import type {
   ApiError,
   ClaimSavedRoutesRequest,
   ClaimSavedRoutesResult,
+  ElevationProfileRequest,
+  ElevationProfileResult,
   GeocodeMunicipalityParams,
   GetNetworkParams,
   HealthStatus,
@@ -370,6 +372,79 @@ export const usePlanRoute = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getPlanRouteMutationOptions(options));
+    }
+
+export const getGetElevationProfileUrl = () => {
+
+
+
+
+  return `/api/route/elevation`
+}
+
+/**
+ * Given a route geometry as ordered [lon, lat] pairs, samples the route and returns elevations along it plus summary statistics (total ascent, descent, highest and lowest points).
+
+ * @summary Get an elevation profile for a route geometry
+ */
+export const getElevationProfile = async (elevationProfileRequest: ElevationProfileRequest, options?: RequestInit): Promise<ElevationProfileResult> => {
+
+  return customFetch<ElevationProfileResult>(getGetElevationProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      elevationProfileRequest,)
+  }
+);}
+
+
+
+
+export const getGetElevationProfileMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getElevationProfile>>, TError,{data: BodyType<ElevationProfileRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getElevationProfile>>, TError,{data: BodyType<ElevationProfileRequest>}, TContext> => {
+
+const mutationKey = ['getElevationProfile'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getElevationProfile>>, {data: BodyType<ElevationProfileRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  getElevationProfile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetElevationProfileMutationResult = NonNullable<Awaited<ReturnType<typeof getElevationProfile>>>
+    export type GetElevationProfileMutationBody = BodyType<ElevationProfileRequest>
+    export type GetElevationProfileMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Get an elevation profile for a route geometry
+ */
+export const useGetElevationProfile = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getElevationProfile>>, TError,{data: BodyType<ElevationProfileRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof getElevationProfile>>,
+        TError,
+        {data: BodyType<ElevationProfileRequest>},
+        TContext
+      > => {
+      return useMutation(getGetElevationProfileMutationOptions(options));
     }
 
 export const getGetRegionsUrl = () => {

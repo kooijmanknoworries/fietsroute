@@ -128,6 +128,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /route/elevation:
+    post:
+      operationId: getElevationProfile
+      tags: [routing]
+      summary: Get an elevation profile for a route geometry
+      description: >
+        Given a route geometry as ordered [lon, lat] pairs, samples the route
+        and returns elevations along it plus summary statistics (total ascent,
+        descent, highest and lowest points).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ElevationProfileRequest"
+      responses:
+        "200":
+          description: Elevation profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ElevationProfileResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Upstream elevation service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /regions:
     get:
       operationId: getRegions
@@ -681,6 +715,58 @@ components:
         - coordinates
         - distanceMeters
         - legs
+    ElevationProfileRequest:
+      type: object
+      properties:
+        coordinates:
+          type: array
+          description: "Route geometry as ordered [lon, lat] pairs."
+          items:
+            type: array
+            items:
+              type: number
+      required:
+        - coordinates
+    ElevationPoint:
+      type: object
+      properties:
+        distanceMeters:
+          type: number
+          description: Cumulative distance from the start of the route.
+        elevationMeters:
+          type: number
+          description: Elevation above sea level at this point.
+      required:
+        - distanceMeters
+        - elevationMeters
+    ElevationProfileResult:
+      type: object
+      properties:
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/ElevationPoint"
+        ascentMeters:
+          type: number
+          description: Total climbing over the route.
+        descentMeters:
+          type: number
+          description: Total descending over the route.
+        minElevationMeters:
+          type: number
+          description: Lowest point on the route.
+        maxElevationMeters:
+          type: number
+          description: Highest point on the route.
+        totalDistanceMeters:
+          type: number
+      required:
+        - points
+        - ascentMeters
+        - descentMeters
+        - minElevationMeters
+        - maxElevationMeters
+        - totalDistanceMeters
     UpdateSavedRouteRequest:
       type: object
       properties:

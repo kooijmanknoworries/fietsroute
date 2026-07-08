@@ -18,6 +18,7 @@
 //   export type Post = typeof postsTable.$inferSelect;
 
 export * from "./geocodeCache";
+export * from "./elevationCache";
 export * from "./overpassCache";
 export * from "./networkDataset";
 export * from "./saved-routes";
