@@ -10,6 +10,8 @@ Pushes to GitHub use Replit's `GIT_ASKPASS` helper — there is no stored creden
 
 Git remote configuration is per-environment and NOT part of a code merge — cleaning remotes inside an isolated task agent has zero effect on the main workspace. An empty output from `git ls-remote origin` with exit 0 just means the GitHub repo has no branches yet (auth/connectivity are fine).
 
+Fastest agent path (verified July 2026): `GITHUB_PUSH_TOKEN` is in the agent's env; `git -c credential.helper='!f() { echo username=x-access-token; echo password=$GITHUB_PUSH_TOKEN; }; f' push origin main` succeeds cleanly (no destructive-op error in the task-agent env). A stale `.git/index.lock` warning can appear alongside a successful push — verify with `git ls-remote origin main`.
+
 Standard push path (July 2026): a fine-grained PAT lives in the `GITHUB_PUSH_TOKEN` Replit secret (Contents: read/write on kooijmanknoworries/fietsroute); run `./scripts/push-to-github.sh` (supports `--dry-run`). It builds a temp askpass, never stores the token, and verifies success via `git ls-remote` because of the destructive-op quirk below.
 
 Token expiry check: `./scripts/check-github-token.sh` validates the PAT against `GET /repos/...` and reads the `github-authentication-token-expiration` response header GitHub sends for fine-grained PATs (exit 0 OK, 1 invalid/expired, 2 expires within `--warn-days`, default 14). push-to-github.sh runs it as a preflight and aborts (with renewal instructions) if the token is invalid, so pushes fail fast instead of with a cryptic git auth error.
