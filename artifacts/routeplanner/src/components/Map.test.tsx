@@ -129,9 +129,9 @@ const baseProps = {
 
 const BASE_LAYER_STORAGE_KEY = "fietsrouteplanner.baseLayer";
 
-// The default street style is "voyager" (CARTO) — see getStreetStyle in
+// The default street style is "osm" (OpenStreetMap) — see getStreetStyle in
 // lib/map-view.ts — so that is the street layer visible on a fresh load.
-const STREET_LAYER = "street-voyager-layer";
+const STREET_LAYER = "street-osm-layer";
 
 function visibilityOf(style: MapOptions["style"], layerId: string) {
   return style?.layers?.find((l) => l.id === layerId)?.layout?.visibility;
@@ -347,8 +347,8 @@ describe("Map", () => {
     );
 
     // Open the style picker (only available while the street base is shown).
-    // The default look is Voyager (CARTO), so that is the button label.
-    fireEvent.click(screen.getByRole("button", { name: /Voyager/ }));
+    // The default look is OpenStreetMap, so that is the button label.
+    fireEvent.click(screen.getByRole("button", { name: /OpenStreetMap/ }));
 
     const menu = screen.getByRole("menu");
     const options = within(menu).getAllByRole("menuitemradio");
@@ -360,10 +360,10 @@ describe("Map", () => {
       "Donker",
       "OpenStreetMap",
     ]);
-    // Voyager is the default, so it starts checked.
+    // OpenStreetMap is the default, so it starts checked.
     expect(
       within(menu)
-        .getByRole("menuitemradio", { name: /Voyager/ })
+        .getByRole("menuitemradio", { name: /OpenStreetMap/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
 

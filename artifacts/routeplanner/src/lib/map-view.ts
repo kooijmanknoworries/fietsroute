@@ -38,9 +38,7 @@ export function setBaseLayer(layer: BaseLayer): void {
 
 /**
  * Returns the user's saved street-style choice from localStorage, defaulting to
- * "voyager" (CARTO) when nothing valid is stored. CARTO tiles are generally
- * more reliable than the classic OpenStreetMap tile layer, which is frequently
- * overloaded or rate-limited.
+ * "osm" (classic OpenStreetMap) when nothing valid is stored.
  */
 export function getStreetStyle(): StreetStyle {
   try {
@@ -53,9 +51,9 @@ export function getStreetStyle(): StreetStyle {
     ) {
       return raw;
     }
-    return "voyager";
+    return "osm";
   } catch {
-    return "voyager";
+    return "osm";
   }
 }
 

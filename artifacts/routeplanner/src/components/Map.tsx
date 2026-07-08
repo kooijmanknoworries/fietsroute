@@ -57,7 +57,7 @@ interface MapProps {
 // Free, keyless raster basemaps. The CARTO styles' "@2x" variant serves high-
 // resolution (retina) tiles so text and lines stay sharp on high-DPI screens.
 // Each style is a different "look" the cyclist can pick between:
-//  - voyager : clean, modern colour map with crisp, readable labels (default)
+//  - voyager : clean, modern colour map with crisp, readable labels
 //  - positron: bright, low-detail light map (good for printing / glare)
 //  - dark    : high-contrast dark map
 //  - osm     : the classic plain OpenStreetMap raster
