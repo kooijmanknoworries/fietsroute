@@ -14,6 +14,7 @@ import {
   getStreetStyle,
   setStreetStyle,
   STREET_STYLES,
+  createTileFailureTracker,
   type BaseLayer,
   type StreetStyle,
 } from "@/lib/map-view";
@@ -284,6 +285,12 @@ export default function Map({
   const [streetStyle, setStreetStyleState] = useState<StreetStyle>(() => getStreetStyle());
   const streetStyleRef = useRef<StreetStyle>(streetStyle);
   streetStyleRef.current = streetStyle;
+  // Repeated OSM tile-load failures (rate-limited/overloaded public servers)
+  // surface a notice suggesting the CARTO styles instead of leaving the user
+  // staring at a blank map. Never auto-switches: the user picked OSM.
+  const osmFailureTrackerRef = useRef(createTileFailureTracker());
+  const [osmTilesFailing, setOsmTilesFailing] = useState(false);
+  const [osmNoticeDismissed, setOsmNoticeDismissed] = useState(false);
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const styleMenuRef = useRef<HTMLDivElement>(null);
   const [poiMenuOpen, setPoiMenuOpen] = useState(false);
@@ -424,6 +431,20 @@ export default function Map({
     }
 
     const m = map.current;
+
+    // Watch for failing OSM street tiles (the public openstreetmap.org tile
+    // servers are occasionally rate-limited or overloaded). MapLibre fires an
+    // "error" event with the failing sourceId for each tile that can't load.
+    // Only count failures while the OSM street style is actually visible.
+    m.on("error", (e: { sourceId?: string; error?: unknown }) => {
+      if (e.sourceId !== streetSourceId("osm")) return;
+      if (streetStyleRef.current !== "osm" || baseLayerRef.current !== "map") {
+        return;
+      }
+      if (osmFailureTrackerRef.current.recordFailure()) {
+        setOsmTilesFailing(true);
+      }
+    });
 
     // Zoom (+/-) buttons in the lower-left corner, with a scale bar beneath them
     // showing the current distance in km/m (e.g. 2 km, 1 km, 500 m, 200 m...).
@@ -863,6 +884,15 @@ export default function Map({
     setBaseLayerState("map");
     setBaseLayer("map");
     setStyleMenuOpen(false);
+    // Give OSM a fresh chance if the user returns to it later, and clear any
+    // "tiles are failing" notice once they've moved to another style.
+    osmFailureTrackerRef.current.reset();
+    setOsmTilesFailing(false);
+    setOsmNoticeDismissed(false);
+  }, []);
+
+  const dismissOsmNotice = useCallback(() => {
+    setOsmNoticeDismissed(true);
   }, []);
 
   useEffect(() => {
@@ -1412,6 +1442,34 @@ export default function Map({
           </div>
         </div>
       )}
+      {!mapError &&
+        osmTilesFailing &&
+        !osmNoticeDismissed &&
+        baseLayer === "map" &&
+        streetStyle === "osm" && (
+          <div
+            role="alert"
+            className="absolute left-1/2 top-3 z-20 flex w-[min(26rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col gap-2 rounded-md border border-amber-300 bg-amber-50/95 p-3 text-xs text-amber-900 shadow-md backdrop-blur"
+          >
+            <p>{t("map.osmOverloaded")}</p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => chooseStreetStyle("voyager")}
+                className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {t("map.osmSwitch")}
+              </button>
+              <button
+                type="button"
+                onClick={dismissOsmNotice}
+                className="rounded-md border border-amber-300 bg-transparent px-3 py-1.5 font-medium text-amber-900 transition-colors hover:bg-amber-100"
+              >
+                {t("map.osmKeep")}
+              </button>
+            </div>
+          </div>
+        )}
       {mapError && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted p-8 text-center">
           <p className="max-w-md text-sm text-muted-foreground">

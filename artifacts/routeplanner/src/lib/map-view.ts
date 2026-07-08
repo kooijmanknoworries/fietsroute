@@ -57,6 +57,41 @@ export function getStreetStyle(): StreetStyle {
   }
 }
 
+/**
+ * How many OSM tile-load failures we tolerate before warning the user that the
+ * public OpenStreetMap tile servers appear overloaded. Kept small so a genuine
+ * outage surfaces quickly, but above 1 so a single flaky tile doesn't nag.
+ */
+export const OSM_TILE_FAILURE_THRESHOLD = 3;
+
+export interface TileFailureTracker {
+  /** Records one failed tile load. Returns true once the threshold is hit. */
+  recordFailure(): boolean;
+  /** Clears the failure count (style switched, notice dismissed, etc.). */
+  reset(): void;
+}
+
+/**
+ * Counts consecutive-session tile failures for a source. Deliberately does NOT
+ * reset on individual successful tiles: an overloaded tile server typically
+ * serves some tiles and drops others, and intermittent successes shouldn't
+ * suppress the warning forever.
+ */
+export function createTileFailureTracker(
+  threshold: number = OSM_TILE_FAILURE_THRESHOLD,
+): TileFailureTracker {
+  let failures = 0;
+  return {
+    recordFailure() {
+      failures += 1;
+      return failures >= threshold;
+    },
+    reset() {
+      failures = 0;
+    },
+  };
+}
+
 export function setStreetStyle(style: StreetStyle): void {
   try {
     localStorage.setItem(STREET_STYLE_KEY, style);

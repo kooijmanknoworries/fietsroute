@@ -179,6 +179,10 @@ const en = {
   "map.style.osm": "OpenStreetMap",
   "map.webglError":
     "The interactive map could not start because this browser or environment does not support WebGL. Try opening the app in a standard desktop browser with hardware acceleration enabled.",
+  "map.osmOverloaded":
+    "The OpenStreetMap tile servers seem overloaded right now, so parts of the map may stay blank. You can switch to the Voyager style, which uses different servers.",
+  "map.osmSwitch": "Switch to Voyager",
+  "map.osmKeep": "Keep OpenStreetMap",
 
   "poi.button": "POI",
   "poi.buttonTitle": "Show points of interest",
@@ -384,6 +388,10 @@ const nl: Record<TranslationKey, string> = {
   "map.style.osm": "OpenStreetMap",
   "map.webglError":
     "De interactieve kaart kon niet starten omdat deze browser of omgeving geen WebGL ondersteunt. Open de app in een normale desktopbrowser met hardwareversnelling ingeschakeld.",
+  "map.osmOverloaded":
+    "De OpenStreetMap-kaartservers lijken momenteel overbelast, waardoor delen van de kaart leeg kunnen blijven. Je kunt overschakelen naar de Voyager-stijl, die andere servers gebruikt.",
+  "map.osmSwitch": "Overschakelen naar Voyager",
+  "map.osmKeep": "OpenStreetMap behouden",
 
   "poi.button": "POI",
   "poi.buttonTitle": "Toon interessante punten",
