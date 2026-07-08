@@ -28,6 +28,7 @@
     "@ungap/structured-clone": "^1.3.0",
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/gpx": "workspace:*",
     "babel-plugin-react-compiler": "^19.0.0-beta-e993439-20250117",
     "expo": "~54.0.27",
     "expo-auth-session": "~7.0.11",
@@ -64,11 +65,11 @@
     "typescript": "~5.9.2",
     "vitest": "^4.1.8",
     "zod": "catalog:",
-    "zod-validation-error": "^3.4.0",
-    "@workspace/gpx": "workspace:*"
+    "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
     "expo-file-system": "~19.0.23",
+    "expo-keep-awake": "~15.0.8",
     "expo-sharing": "~14.0.8",
     "expo-speech": "~14.0.8",
     "leaflet": "1.9.4",

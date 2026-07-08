@@ -23,6 +23,7 @@ import {
   type VoiceGuide,
 } from "@/lib/ride-voice";
 import { speakPrompt, stopSpeaking } from "@/lib/speech";
+import { keepAwakeDuringRide, releaseKeepAwake } from "@/lib/keep-awake";
 
 // A leg counts as completed once the rider has passed within this distance of
 // its end node, absorbing GPS jitter around the knooppunt.
@@ -348,6 +349,11 @@ export function useRide({
     setIsRiding(true);
     ridingRef.current = true;
 
+    // Keep the screen from auto-locking for the whole ride: locking would
+    // suspend the foreground GPS watch and silence voice prompts. Best-effort
+    // and fire-and-forget — tracking starts regardless.
+    void keepAwakeDuringRide();
+
     (async () => {
       try {
         const { status } =
@@ -387,6 +393,7 @@ export function useRide({
   const stopRide = useCallback(() => {
     ridingRef.current = false;
     stopWatch();
+    void releaseKeepAwake();
     voiceGuideRef.current = null;
     stopSpeaking();
     // Final flush of anything not yet persisted.
@@ -430,6 +437,7 @@ export function useRide({
     () => () => {
       ridingRef.current = false;
       stopWatch();
+      void releaseKeepAwake();
     },
     [stopWatch],
   );
@@ -440,6 +448,7 @@ export function useRide({
     if (!ridingRef.current) return;
     ridingRef.current = false;
     stopWatch();
+    void releaseKeepAwake();
     setIsRiding(false);
     setRidePosition(null);
     setProgressMeters(0);

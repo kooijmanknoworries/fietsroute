@@ -77,6 +77,25 @@ export default function RideOverlay() {
         </View>
       </View>
 
+      <View style={[styles.notice, { backgroundColor: colors.muted }]}>
+        <Ionicons
+          name="sunny-outline"
+          size={14}
+          color={colors.mutedForeground}
+        />
+        <Text
+          style={[
+            styles.noticeText,
+            { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+          ]}
+          testID="keep-awake-notice"
+        >
+          Het scherm blijft aan tijdens de rit zodat gps en spraakinstructies
+          blijven werken. Dit verbruikt meer batterij — zet de helderheid
+          gerust laag.
+        </Text>
+      </View>
+
       {gpsError ? (
         <View style={[styles.notice, { backgroundColor: colors.muted }]}>
           <Ionicons name="warning-outline" size={14} color={colors.destructive} />

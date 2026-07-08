@@ -13,3 +13,7 @@ description: Design constraints for the GPS ride-tracking + visited-segment hist
   **Why:** knooppunt refs are only locally unique and reused across the network; node ids are the only stable identity for a leg.
 
 - **Persistence gating**: ride mode (GPS marker, recoloring, current-ride lock markers) works for everyone; fetching + saving permanent visited history is gated to signed-in users (Clerk userId as owner key, same pattern as saved routes). `useSaveVisitedSegments` uses `onConflictDoNothing` on unique `(owner_key, segment_key)`.
+
+- **Screen-lock strategy**: rides hold an expo-keep-awake lock (tag `ride-tracking`, `lib/keep-awake.ts`) instead of background location — Expo Go has no background-location task support on iOS, and screen lock suspends the foreground watch + silences expo-speech. Release in stopRide, unmount cleanup, AND the plan-changed effect; UI must state the battery cost.
+  **Why:** task-manager background updates need a dev build/config plugin unavailable in Expo Go; keep-awake is the only strategy that keeps GPS + TTS alive there.
+  **How to apply:** any new code path that ends a ride must also release the keep-awake lock; tests mock `expo-keep-awake` via vitest alias.

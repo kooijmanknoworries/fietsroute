@@ -3,6 +3,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import type { RenderHookResult } from "@testing-library/react";
 import * as Location from "expo-location";
 import * as Speech from "expo-speech";
+import * as KeepAwake from "expo-keep-awake";
 import { useRide, type RideState } from "./useRide";
 import type { NetworkNode, RoutePlan } from "@/context/RoutePlannerContext";
 
@@ -155,6 +156,29 @@ describe("useRide", () => {
   it("can ride with a plan and two selected nodes", () => {
     const { result } = mount(false);
     expect(result.current.canRide).toBe(true);
+  });
+
+  it("keeps the screen awake for the duration of the ride", async () => {
+    const { result } = mount(false);
+
+    await startRide(result);
+    // Screen lock would suspend the foreground GPS watch and silence voice
+    // prompts, so the ride must hold a keep-awake lock while active.
+    expect(KeepAwake.activateKeepAwakeAsync).toHaveBeenCalledTimes(1);
+    expect(KeepAwake.deactivateKeepAwake).not.toHaveBeenCalled();
+
+    await stopRide(result);
+    expect(KeepAwake.deactivateKeepAwake).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the keep-awake lock when the hook unmounts mid-ride", async () => {
+    const { result, unmount } = mount(false);
+
+    await startRide(result);
+    expect(KeepAwake.activateKeepAwakeAsync).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(KeepAwake.deactivateKeepAwake).toHaveBeenCalled();
   });
 
   it("summarises distance and newly unlocked segments when signed in", async () => {

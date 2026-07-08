@@ -23,6 +23,10 @@ export default defineConfig({
         replacement: path.resolve(dir, "test/mocks/expo-speech.ts"),
       },
       {
+        find: /^expo-keep-awake$/,
+        replacement: path.resolve(dir, "test/mocks/expo-keep-awake.ts"),
+      },
+      {
         find: /^expo-file-system$/,
         replacement: path.resolve(dir, "test/mocks/expo-file-system.ts"),
       },

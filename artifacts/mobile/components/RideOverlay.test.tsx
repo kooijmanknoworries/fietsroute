@@ -158,6 +158,8 @@ describe("ride vs planning UI split", () => {
     // Planning chrome is gone; only the ride overlay with Stop remains.
     await waitFor(() => expect(screen.getByTestId("ride-overlay")).toBeTruthy());
     expect(screen.getByTestId("stop-ride")).toBeTruthy();
+    // The overlay explains that the screen stays on (and why / battery cost).
+    expect(screen.getByTestId("keep-awake-notice")).toBeTruthy();
     expect(screen.queryByTestId("clear-route")).toBeNull();
     expect(screen.queryByTestId("start-ride")).toBeNull();
 
