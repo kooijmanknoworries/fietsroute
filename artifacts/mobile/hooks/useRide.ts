@@ -10,11 +10,19 @@ import {
 import type { NetworkNode, RoutePlan } from "@/context/RoutePlannerContext";
 import {
   legSegments,
+  polylineLength,
   snapToRoute,
   RouteCoverage,
   type LegSegment,
   type LngLat,
 } from "@/lib/ride-geo";
+import {
+  createVoiceGuide,
+  phraseFor,
+  voiceNodesFromLegs,
+  type VoiceGuide,
+} from "@/lib/ride-voice";
+import { speakPrompt, stopSpeaking } from "@/lib/speech";
 
 // A leg counts as completed once the rider has passed within this distance of
 // its end node, absorbing GPS jitter around the knooppunt.
@@ -71,6 +79,10 @@ export interface RideState {
   rideSummary: RideSummary | null;
   /** Dismiss the end-of-ride summary. */
   dismissRideSummary: () => void;
+  /** Whether voice prompts are muted. */
+  isMuted: boolean;
+  /** Toggle voice prompts on/off. */
+  toggleMute: () => void;
 }
 
 interface UseRideOptions {
@@ -109,6 +121,7 @@ export function useRide({
     new Map(),
   );
   const [rideSummary, setRideSummary] = useState<RideSummary | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
 
   // Active expo-location watch subscription, cleared when the ride stops.
   const watchRef = useRef<Location.LocationSubscription | null>(null);
@@ -133,6 +146,10 @@ export function useRide({
   // only unlocks when coverage spans it start-to-end: joining mid-leg or
   // jumping over a stretch never credits the un-ridden part.
   const coverageRef = useRef(new RouteCoverage());
+  // Per-ride voice guide deriving node/off-route speech events from fixes.
+  const voiceGuideRef = useRef<VoiceGuide | null>(null);
+  // Mirrors `isMuted` so the GPS callback reads the live value.
+  const mutedRef = useRef(false);
 
   const routeCoords = routePlan?.coordinates ?? null;
   const totalMeters = routePlan?.distanceMeters ?? 0;
@@ -187,6 +204,15 @@ export function useRide({
     [isSignedIn, segments, saveMutation, queryClient],
   );
 
+  // Speak the prompts derived from one fix, respecting the mute toggle.
+  const emitVoice = useCallback((distanceAlong: number, offRoute: boolean) => {
+    const guide = voiceGuideRef.current;
+    if (!guide) return;
+    const events = guide.update(distanceAlong, offRoute);
+    if (mutedRef.current) return;
+    for (const event of events) speakPrompt(phraseFor(event));
+  }, []);
+
   const handleFix = useCallback(
     (lon: number, lat: number, accuracy: number | null) => {
       // Reject coarse fixes outright: they can be hundreds of metres off and
@@ -206,6 +232,7 @@ export function useRide({
       // Off-route: show the rider's true position but never credit distance.
       if (snap.distanceToRoute > MAX_OFF_ROUTE_M) {
         setRidePosition([lon, lat]);
+        emitVoice(routeProgressRef.current, true);
         return;
       }
 
@@ -221,6 +248,7 @@ export function useRide({
         setRidePosition(snap.snapped);
         setRouteProgressMeters(snap.distanceAlong);
         setProgressMeters(0);
+        emitVoice(snap.distanceAlong, false);
         return;
       }
 
@@ -249,6 +277,7 @@ export function useRide({
       const startProgress = startProgressRef.current ?? 0;
       setRouteProgressMeters(routeProgress);
       setProgressMeters(Math.max(0, routeProgress - startProgress));
+      emitVoice(routeProgress, false);
 
       // Latch legs whose full extent has been continuously covered by accepted
       // fixes (monotonic — never un-mark). Joining a leg mid-way or skipping a
@@ -281,7 +310,7 @@ export function useRide({
       });
       if (newlyDone.length > 0) persist(newlyDone);
     },
-    [routeCoords, segments, persist],
+    [routeCoords, segments, persist, emitVoice],
   );
 
   const stopWatch = useCallback(() => {
@@ -308,6 +337,14 @@ export function useRide({
     coverageRef.current = new RouteCoverage();
     setRidePosition(null);
     setGpsError(null);
+    // Fresh voice guide per ride, built from the plan's node positions.
+    voiceGuideRef.current = routePlan
+      ? createVoiceGuide(
+          voiceNodesFromLegs(routePlan.legs, (coords) =>
+            polylineLength(coords as LngLat[]),
+          ),
+        )
+      : null;
     setIsRiding(true);
     ridingRef.current = true;
 
@@ -345,11 +382,13 @@ export function useRide({
         setGpsError("unavailable");
       }
     })();
-  }, [canRide, handleFix, history]);
+  }, [canRide, handleFix, history, routePlan]);
 
   const stopRide = useCallback(() => {
     ridingRef.current = false;
     stopWatch();
+    voiceGuideRef.current = null;
+    stopSpeaking();
     // Final flush of anything not yet persisted.
     persist([...rideCompleted.values()]);
 
@@ -375,6 +414,16 @@ export function useRide({
   }, [stopWatch, persist, rideCompleted, progressMeters, isSignedIn]);
 
   const dismissRideSummary = useCallback(() => setRideSummary(null), []);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      mutedRef.current = next;
+      // Muting mid-prompt should silence it immediately.
+      if (next) stopSpeaking();
+      return next;
+    });
+  }, []);
 
   // Clean up the geolocation watch on unmount.
   useEffect(
@@ -402,6 +451,8 @@ export function useRide({
     setRideCompleted(new Map());
     savedKeysRef.current = new Set();
     setRideSummary(null);
+    voiceGuideRef.current = null;
+    stopSpeaking();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routePlan]);
 
@@ -416,5 +467,7 @@ export function useRide({
     totalMeters,
     rideSummary,
     dismissRideSummary,
+    isMuted,
+    toggleMute,
   };
 }

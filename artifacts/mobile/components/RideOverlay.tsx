@@ -29,6 +29,8 @@ export default function RideOverlay() {
     ridePosition,
     progressMeters,
     totalMeters,
+    isMuted,
+    toggleMute,
   } = useRideContext();
 
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
@@ -54,9 +56,25 @@ export default function RideOverlay() {
             Rit bezig
           </Text>
         </View>
-        <Text style={[styles.progressText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
-          {formatDistance(progressMeters)} van {formatDistance(totalMeters)} gereden
-        </Text>
+        <View style={styles.statusLeft}>
+          <Text style={[styles.progressText, { color: colors.mutedForeground, fontFamily: "Inter_400Regular" }]}>
+            {formatDistance(progressMeters)} van {formatDistance(totalMeters)} gereden
+          </Text>
+          <TouchableOpacity
+            onPress={toggleMute}
+            style={[styles.muteBtn, { borderColor: colors.border }]}
+            testID="toggle-voice"
+            accessibilityLabel={
+              isMuted ? "Spraakinstructies aanzetten" : "Spraakinstructies uitzetten"
+            }
+          >
+            <Ionicons
+              name={isMuted ? "volume-mute" : "volume-high"}
+              size={18}
+              color={isMuted ? colors.mutedForeground : colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {gpsError ? (
@@ -127,6 +145,14 @@ const styles = StyleSheet.create({
   },
   progressText: {
     fontSize: 13,
+  },
+  muteBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   notice: {
     flexDirection: "row",

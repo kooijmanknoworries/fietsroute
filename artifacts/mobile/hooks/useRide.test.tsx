@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import type { RenderHookResult } from "@testing-library/react";
 import * as Location from "expo-location";
+import * as Speech from "expo-speech";
 import { useRide, type RideState } from "./useRide";
 import type { NetworkNode, RoutePlan } from "@/context/RoutePlannerContext";
 
@@ -130,9 +131,13 @@ afterEach(() => {
 });
 
 function mount(isSignedIn: boolean) {
+  // The plan must be referentially stable across re-renders, like the real
+  // context value: a new object per render would trip the hook's
+  // plan-changed effect and end the ride mid-test.
+  const plan = makePlan();
   return renderHook(() =>
     useRide({
-      routePlan: makePlan(),
+      routePlan: plan,
       selectedNodes: [NODE_A, NODE_B],
       isSignedIn,
     }),
@@ -261,5 +266,97 @@ describe("useRide", () => {
 
     act(() => result.current.dismissRideSummary());
     expect(result.current.rideSummary).toBeNull();
+  });
+
+  describe("voice prompts", () => {
+    function spokenTexts(): string[] {
+      return vi.mocked(Speech.speak).mock.calls.map((c) => String(c[0]));
+    }
+
+    it("speaks the start node prompt on the first on-route fix", async () => {
+      const { result } = mount(false);
+      await startRide(result);
+      await pushFix(result, 52.0, 5.0);
+
+      expect(spokenTexts()).toEqual([
+        "Bij knooppunt 63, ga verder naar knooppunt 08",
+      ]);
+    });
+
+    it("speaks the destination prompt when reaching the final node, once", async () => {
+      const { result } = mount(false);
+      await startRide(result);
+      await driveToEnd(result);
+      // Extra fix at the destination must not repeat the prompt.
+      advanceClock(10);
+      await pushFix(result, 52.01, 5.01);
+
+      const texts = spokenTexts();
+      expect(texts[texts.length - 1]).toBe(
+        "Bij knooppunt 08. Je hebt je bestemming bereikt",
+      );
+      expect(
+        texts.filter((t) => t.includes("bestemming")).length,
+      ).toBe(1);
+    });
+
+    it("warns after sustained off-route fixes and confirms the return", async () => {
+      const { result } = mount(false);
+      await startRide(result);
+      await pushFix(result, 52.0, 5.0);
+      vi.mocked(Speech.speak).mockClear();
+
+      // ~290 m from the planned line: off route. One stray fix is jitter.
+      await pushFix(result, 52.0, 5.005);
+      expect(spokenTexts()).toEqual([]);
+
+      // Sustained: warn exactly once.
+      await pushFix(result, 52.0, 5.005);
+      await pushFix(result, 52.0, 5.005);
+      await pushFix(result, 52.0, 5.005);
+      expect(spokenTexts()).toEqual([
+        "Let op: je bent van de route af. Keer terug naar de route",
+      ]);
+
+      // Two on-route fixes confirm the return.
+      advanceClock(30);
+      await pushFix(result, 52.0, 5.0);
+      await pushFix(result, 52.0, 5.0);
+      expect(spokenTexts()).toEqual([
+        "Let op: je bent van de route af. Keer terug naar de route",
+        "Je bent weer op de route",
+      ]);
+    });
+
+    it("stays silent while muted and silences the current prompt", async () => {
+      const { result } = mount(false);
+      await startRide(result);
+
+      expect(result.current.isMuted).toBe(false);
+      act(() => result.current.toggleMute());
+      expect(result.current.isMuted).toBe(true);
+      expect(Speech.stop).toHaveBeenCalled();
+
+      await pushFix(result, 52.0, 5.0);
+      expect(Speech.speak).not.toHaveBeenCalled();
+
+      // Unmuting resumes prompts for later events.
+      act(() => result.current.toggleMute());
+      advanceClock(240);
+      await pushFix(result, 52.01, 5.01);
+      expect(spokenTexts()).toEqual([
+        "Bij knooppunt 08. Je hebt je bestemming bereikt",
+      ]);
+    });
+
+    it("stops speaking when the ride stops", async () => {
+      const { result } = mount(false);
+      await startRide(result);
+      await pushFix(result, 52.0, 5.0);
+      vi.mocked(Speech.stop).mockClear();
+
+      await stopRide(result);
+      expect(Speech.stop).toHaveBeenCalled();
+    });
   });
 });
