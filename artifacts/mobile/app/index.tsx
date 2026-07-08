@@ -132,6 +132,30 @@ function MapScreenInner() {
     );
   }, []);
 
+  // Follow the rider: on the first GPS fix of a ride, zoom to a close
+  // road-following view (~200 m across); on later fixes, keep them centred.
+  const rideZoomedRef = useRef(false);
+  useEffect(() => {
+    if (!isRiding || !ridePosition) {
+      rideZoomedRef.current = false;
+      return;
+    }
+    const firstFix = !rideZoomedRef.current;
+    rideZoomedRef.current = true;
+    const delta = firstFix ? 0.004 : undefined;
+    const current = mapRegion;
+    mapRef.current?.animateToRegion(
+      {
+        latitude: ridePosition[1],
+        longitude: ridePosition[0],
+        latitudeDelta: delta ?? current.latitudeDelta,
+        longitudeDelta: delta ?? current.longitudeDelta,
+      },
+      firstFix ? 1000 : 600
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRiding, ridePosition]);
+
   const selectedNodeIds = new Set(selectedNodes.map((n) => n.id));
 
   const routeCoords =
@@ -231,8 +255,8 @@ function MapScreenInner() {
             zIndex={20}
             testID="ride-position-marker"
           >
-            <View style={styles.ridePositionOuter}>
-              <View style={[styles.ridePositionDot, { backgroundColor: colors.primary }]} />
+            <View style={[styles.ridePositionOuter, { backgroundColor: colors.primary }]}>
+              <Ionicons name="bicycle" size={20} color="#ffffff" />
             </View>
           </Marker>
         )}
@@ -350,24 +374,18 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   ridePositionOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: 3,
+    borderColor: "#ffffff",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 4,
-  },
-  ridePositionDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 2,
-    borderColor: "#ffffff",
   },
   savedBtn: {
     position: "absolute",

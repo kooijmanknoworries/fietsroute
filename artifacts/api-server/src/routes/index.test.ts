@@ -167,13 +167,6 @@ const protectedRequests: Array<{
     },
   },
   {
-    name: "GET /api/lf-routes",
-    send: (auth) => {
-      const r = request(app).get("/api/lf-routes");
-      return auth ? r.set("x-test-user", "user_test") : r;
-    },
-  },
-  {
     name: "GET /api/geocode",
     send: (auth) => {
       const r = request(app).get("/api/geocode");

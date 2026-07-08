@@ -78,28 +78,6 @@ export interface NetworkDatasetStatus {
   oldestDataAgeHours: number | null;
 }
 
-/**
- * A long-distance LF cycling route (OSM ncn route relation) with the parts of its geometry that intersect the requested bounding box.
-
- */
-export interface LfRoute {
-  /** Stable OSM relation id. */
-  id: string;
-  /** The route name (e.g. "LF Maasroute"), when tagged. */
-  name?: string;
-  /** The short route code (e.g. "LF3"), when tagged. */
-  ref?: string;
-  /** The route geometry as one or more line strings of ordered [lon, lat] pairs (a MultiLineString-style coordinate array).
-   */
-  lines: number[][][];
-}
-
-export interface LfRoutesData {
-  routes: LfRoute[];
-  /** True if the area was too large and results were limited. */
-  truncated: boolean;
-}
-
 export interface RouteRequestNode {
   id: string;
   ref: string;
@@ -292,13 +270,6 @@ export interface MunicipalityResult {
 }
 
 export type GetNetworkParams = {
-/**
- * Bounding box as minLon,minLat,maxLon,maxLat (WGS84).
- */
-bbox: string;
-};
-
-export type GetLfRoutesParams = {
 /**
  * Bounding box as minLon,minLat,maxLon,maxLat (WGS84).
  */

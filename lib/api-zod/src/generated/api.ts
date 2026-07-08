@@ -61,26 +61,6 @@ export const GetNetworkStatusResponse = zod.object({
 
 
 /**
- * Returns the long-distance cycling routes (Landelijke Fietsroutes, network=ncn route relations such as the LF Maasroute) that pass through the given bounding box, as line geometries with the route's name and ref. Data is sourced from OpenStreetMap and cached.
-
- * @summary Get long-distance LF cycling routes for a bounding box
- */
-export const GetLfRoutesQueryParams = zod.object({
-  "bbox": zod.coerce.string().describe('Bounding box as minLon,minLat,maxLon,maxLat (WGS84).')
-})
-
-export const GetLfRoutesResponse = zod.object({
-  "routes": zod.array(zod.object({
-  "id": zod.string().describe('Stable OSM relation id.'),
-  "name": zod.string().optional().describe('The route name (e.g. \"LF Maasroute\"), when tagged.'),
-  "ref": zod.string().optional().describe('The short route code (e.g. \"LF3\"), when tagged.'),
-  "lines": zod.array(zod.array(zod.array(zod.number()))).describe('The route geometry as one or more line strings of ordered [lon, lat] pairs (a MultiLineString-style coordinate array).\n')
-}).describe('A long-distance LF cycling route (OSM ncn route relation) with the parts of its geometry that intersect the requested bounding box.\n')),
-  "truncated": zod.boolean().describe('True if the area was too large and results were limited.')
-})
-
-
-/**
  * Given an ordered list of selected nodes, computes the route that follows the cycling network segments between each consecutive pair of nodes, returning the full geometry, the ordered node numbers, and the total distance.
 
  * @summary Plan a route along the node network

@@ -24,10 +24,8 @@ import type {
   ClaimSavedRoutesRequest,
   ClaimSavedRoutesResult,
   GeocodeMunicipalityParams,
-  GetLfRoutesParams,
   GetNetworkParams,
   HealthStatus,
-  LfRoutesData,
   MunicipalityResult,
   MyAccess,
   NetworkData,
@@ -289,92 +287,6 @@ export function useGetNetworkStatus<TData = Awaited<ReturnType<typeof getNetwork
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetNetworkStatusQueryOptions(options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
-
-export const getGetLfRoutesUrl = (params: GetLfRoutesParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/lf-routes?${stringifiedParams}` : `/api/lf-routes`
-}
-
-/**
- * Returns the long-distance cycling routes (Landelijke Fietsroutes, network=ncn route relations such as the LF Maasroute) that pass through the given bounding box, as line geometries with the route's name and ref. Data is sourced from OpenStreetMap and cached.
-
- * @summary Get long-distance LF cycling routes for a bounding box
- */
-export const getLfRoutes = async (params: GetLfRoutesParams, options?: RequestInit): Promise<LfRoutesData> => {
-
-  return customFetch<LfRoutesData>(getGetLfRoutesUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetLfRoutesQueryKey = (params?: GetLfRoutesParams,) => {
-    return [
-    `/api/lf-routes`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetLfRoutesQueryOptions = <TData = Awaited<ReturnType<typeof getLfRoutes>>, TError = ErrorType<ApiError>>(params: GetLfRoutesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLfRoutes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetLfRoutesQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLfRoutes>>> = ({ signal }) => getLfRoutes(params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLfRoutes>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetLfRoutesQueryResult = NonNullable<Awaited<ReturnType<typeof getLfRoutes>>>
-export type GetLfRoutesQueryError = ErrorType<ApiError>
-
-
-/**
- * @summary Get long-distance LF cycling routes for a bounding box
- */
-
-export function useGetLfRoutes<TData = Awaited<ReturnType<typeof getLfRoutes>>, TError = ErrorType<ApiError>>(
- params: GetLfRoutesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLfRoutes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetLfRoutesQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

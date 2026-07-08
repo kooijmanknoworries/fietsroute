@@ -33,15 +33,6 @@ const { constructorCalls, fitBoundsCalls, layoutCalls, addedLayers } = vi.hoiste
   addedLayers: [] as Array<Record<string, unknown>>,
 }));
 
-// The map fetches the (toggleable) LF-routes overlay through the generated
-// API client; stub it so no real query client or network is needed.
-vi.mock("@workspace/api-client-react", () => ({
-  useGetLfRoutes: () => ({ data: undefined }),
-  getGetLfRoutesQueryKey: (params?: { bbox: string }) => [
-    "lf-routes",
-    params?.bbox,
-  ],
-}));
 
 vi.mock("maplibre-gl", () => {
   class FakeMap {
@@ -382,49 +373,6 @@ describe("Map", () => {
     expect(localStorage.getItem("fietsrouteplanner.streetStyle")).toBe("dark");
     // Choosing a street look also switches the street base back on.
     expect(localStorage.getItem("fietsrouteplanner.baseLayer")).toBe("map");
-  });
-
-  it("LF-routes overlay is off by default and toggles visible when clicked", () => {
-    render(
-      <I18nProvider>
-        <Map {...baseProps} initialBounds={null} fitBounds={null} />
-      </I18nProvider>,
-    );
-
-    // The layer is registered hidden (toggle off by default).
-    const lfLayer = addedLayers.find((l) => l.id === "lf-routes-layer");
-    expect(lfLayer).toBeDefined();
-    expect((lfLayer?.layout as { visibility?: string })?.visibility).toBe("none");
-
-    // Toggling on shows the layer and persists the preference.
-    fireEvent.click(screen.getByRole("button", { name: /LF-routes/ }));
-    expect(lastVisibility("lf-routes-layer")).toBe("visible");
-    expect(localStorage.getItem("fietsrouteplanner.lfRoutes")).toBe("on");
-
-    // Toggling off hides it again.
-    fireEvent.click(screen.getByRole("button", { name: /LF-routes/ }));
-    expect(lastVisibility("lf-routes-layer")).toBe("none");
-    expect(localStorage.getItem("fietsrouteplanner.lfRoutes")).toBe("off");
-  });
-
-  it("restores a persisted LF-routes toggle on the next load", () => {
-    localStorage.setItem("fietsrouteplanner.lfRoutes", "on");
-
-    render(
-      <I18nProvider>
-        <Map {...baseProps} initialBounds={null} fitBounds={null} />
-      </I18nProvider>,
-    );
-
-    const lfLayer = addedLayers.find((l) => l.id === "lf-routes-layer");
-    expect((lfLayer?.layout as { visibility?: string })?.visibility).toBe(
-      "visible",
-    );
-    expect(
-      screen.getByRole("button", { name: /LF-routes/ }).getAttribute(
-        "aria-pressed",
-      ),
-    ).toBe("true");
   });
 
   it("restores a previously saved street style on reload", () => {

@@ -98,7 +98,7 @@ function chunkKey(b: Bbox): string {
 }
 
 // Successfully imported chunks are marked in the persistent overpass_cache
-// table (under their own key prefix, like the `lf:` overlay keys) so an
+// table (under their own key prefix) so an
 // interrupted import resumes where it left off after a restart instead of
 // re-querying all ~90 chunks from Overpass again.
 const CHUNK_MARKER_PREFIX = "import-chunk:";

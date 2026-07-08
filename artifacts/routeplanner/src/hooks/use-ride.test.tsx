@@ -18,8 +18,11 @@ vi.mock("@workspace/api-client-react", () => ({
 }));
 
 // Capture the geolocation success callback so tests can drive GPS fixes.
-let geoSuccess: ((pos: { coords: { longitude: number; latitude: number } }) => void) | null =
-  null;
+let geoSuccess:
+  | ((pos: {
+      coords: { longitude: number; latitude: number; accuracy?: number };
+    }) => void)
+  | null = null;
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -29,17 +32,17 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 // A straight two-leg route along the equator so distances are easy to reason
-// about: node A → B → C, one degree of longitude apart.
+// about: node A → B → C, 0.1 degree of longitude (~11.1 km) apart.
 const routePlan = {
-  distanceMeters: 222_000,
+  distanceMeters: 22_264,
   coordinates: [
     [0, 0],
-    [1, 0],
-    [2, 0],
+    [0.1, 0],
+    [0.2, 0],
   ],
   legs: [
-    { fromRef: "1", toRef: "2", coordinates: [[0, 0], [1, 0]] },
-    { fromRef: "2", toRef: "3", coordinates: [[1, 0], [2, 0]] },
+    { fromRef: "1", toRef: "2", coordinates: [[0, 0], [0.1, 0]] },
+    { fromRef: "2", toRef: "3", coordinates: [[0.1, 0], [0.2, 0]] },
   ],
 } as never;
 
@@ -49,13 +52,30 @@ const selectedNodes = [
   { id: "n3" },
 ] as never;
 
-function fix(lon: number, lat: number) {
+function fix(lon: number, lat: number, accuracy = 5) {
   act(() => {
-    geoSuccess?.({ coords: { longitude: lon, latitude: lat } });
+    geoSuccess?.({ coords: { longitude: lon, latitude: lat, accuracy } });
   });
 }
 
+// Advance the (fake) clock so the plausible-speed gate accepts the next fix.
+function advanceClock(seconds: number) {
+  vi.setSystemTime(new Date(Date.now() + seconds * 1000));
+}
+
+// Drive the whole route with plausible fixes: baseline at the start, then
+// enough wall-clock time between fixes for the covered distance.
+function driveToEnd() {
+  fix(0, 0); // baseline: progress starts at zero here
+  advanceClock(1800); // 30 min for ~11.1 km — a plausible cycling pace
+  fix(0.1, 0);
+  advanceClock(1800);
+  fix(0.2, 0);
+}
+
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-04T10:00:00Z"));
   apiState.history.data = [];
   apiState.save.mutate = vi.fn();
   geoSuccess = null;
@@ -73,6 +93,93 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+describe("useRide GPS gating", () => {
+  it("ignores fixes with poor accuracy entirely", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    fix(0, 0, 500); // coarse IP-style fix: rejected outright
+    expect(result.current.ridePosition).toBeNull();
+    expect(result.current.progressMeters).toBe(0);
+  });
+
+  it("starts progress at zero on the first accepted fix", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    // First fix lands mid-route: no instant kilometres.
+    fix(0.1, 0);
+    expect(result.current.progressMeters).toBe(0);
+    expect(result.current.ridePosition).not.toBeNull();
+  });
+
+  it("shows an off-route position without crediting distance", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    fix(0, 0); // baseline on route
+    advanceClock(60);
+    fix(0.05, 0.01); // ~1.1 km north of the route: off-route
+    expect(result.current.progressMeters).toBe(0);
+    // The rider's raw position is still shown.
+    expect(result.current.ridePosition?.[1]).toBeCloseTo(0.01, 5);
+  });
+
+  it("rejects an implausible teleport along the route", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    fix(0, 0); // baseline
+    advanceClock(10);
+    fix(0.2, 0); // ~22 km in 10 s: impossible — no distance credited
+    expect(result.current.progressMeters).toBe(0);
+    expect(apiState.save.mutate).not.toHaveBeenCalled();
+  });
+
+  it("credits distance for plausible movement", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    fix(0, 0);
+    advanceClock(120);
+    fix(0.01, 0); // ~1.1 km in 2 min ≈ 33 km/h: plausible
+    expect(result.current.progressMeters).toBeGreaterThan(1000);
+    expect(result.current.progressMeters).toBeLessThan(1300);
+  });
+
+  it("never decreases progress on a backwards fix", () => {
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
+
+    act(() => result.current.startRide());
+    fix(0, 0);
+    advanceClock(120);
+    fix(0.01, 0);
+    const progress = result.current.progressMeters;
+    advanceClock(60);
+    fix(0.005, 0); // GPS wobbles backwards
+    expect(result.current.progressMeters).toBe(progress);
+  });
 });
 
 describe("useRide end-of-ride summary", () => {
@@ -91,8 +198,7 @@ describe("useRide end-of-ride summary", () => {
     );
 
     act(() => result.current.startRide());
-    // Drive to the end so both legs latch as completed.
-    fix(2, 0);
+    driveToEnd();
     act(() => result.current.stopRide());
 
     const summary = result.current.rideSummary;
@@ -103,7 +209,7 @@ describe("useRide end-of-ride summary", () => {
 
   it("excludes already-visited segments from the new count when signed in", () => {
     // Seed lifetime history with the first leg (nodes n1→n2) already ridden.
-    apiState.history.data = [{ segmentKey: "n1__n2", lon: 0.5, lat: 0 }];
+    apiState.history.data = [{ segmentKey: "n1__n2", lon: 0.05, lat: 0 }];
 
     const { result } = renderHook(
       () => useRide({ routePlan, selectedNodes, isSignedIn: true }),
@@ -111,7 +217,7 @@ describe("useRide end-of-ride summary", () => {
     );
 
     act(() => result.current.startRide());
-    fix(2, 0);
+    driveToEnd();
     act(() => result.current.stopRide());
 
     const summary = result.current.rideSummary;
@@ -135,11 +241,11 @@ describe("useRide end-of-ride summary", () => {
     );
 
     act(() => result.current.startRide());
-    fix(2, 0); // completes both legs, persisting them
+    driveToEnd(); // completes both legs, persisting them
     // Simulate the query refetch that follows a successful save mid-ride.
     apiState.history.data = [
-      { segmentKey: "n1__n2", lon: 0.5, lat: 0 },
-      { segmentKey: "n2__n3", lon: 1.5, lat: 0 },
+      { segmentKey: "n1__n2", lon: 0.05, lat: 0 },
+      { segmentKey: "n2__n3", lon: 0.15, lat: 0 },
     ];
     rerender();
     act(() => result.current.stopRide());
@@ -150,52 +256,36 @@ describe("useRide end-of-ride summary", () => {
   });
 
   it("reports elapsed time and average speed from wall-clock start-to-stop", () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date("2026-07-04T10:00:00Z"));
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
 
-      const { result } = renderHook(
-        () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
-        { wrapper },
-      );
+    act(() => result.current.startRide());
+    driveToEnd(); // advances the clock exactly 3600 s
+    act(() => result.current.stopRide());
 
-      act(() => result.current.startRide());
-      fix(2, 0); // drive to the end so full distance is covered
-      // One hour of wall-clock time passes before stopping.
-      vi.setSystemTime(new Date("2026-07-04T11:00:00Z"));
-      act(() => result.current.stopRide());
-
-      const summary = result.current.rideSummary;
-      expect(summary?.durationSeconds).toBeCloseTo(3600, 0);
-      // ~222 km over 1 hour → ~222 km/h (route geometry, not realistic speed).
-      const expectedKmh = (summary!.distanceMeters / 1000) / 1;
-      expect(summary?.avgSpeedKmh).toBeCloseTo(expectedKmh, 1);
-    } finally {
-      vi.useRealTimers();
-    }
+    const summary = result.current.rideSummary;
+    expect(summary?.durationSeconds).toBeCloseTo(3600, 0);
+    // ~22.3 km over 1 hour → ~22.3 km/h.
+    const expectedKmh = summary!.distanceMeters / 1000 / 1;
+    expect(summary?.avgSpeedKmh).toBeCloseTo(expectedKmh, 1);
   });
 
   it("leaves average speed null for an instant ride", () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date("2026-07-04T10:00:00Z"));
+    const { result } = renderHook(
+      () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
+      { wrapper },
+    );
 
-      const { result } = renderHook(
-        () => useRide({ routePlan, selectedNodes, isSignedIn: false }),
-        { wrapper },
-      );
+    act(() => result.current.startRide());
+    fix(0, 0);
+    // Stop with no wall-clock time elapsed.
+    act(() => result.current.stopRide());
 
-      act(() => result.current.startRide());
-      fix(2, 0);
-      // Stop with no wall-clock time elapsed.
-      act(() => result.current.stopRide());
-
-      const summary = result.current.rideSummary;
-      expect(summary?.durationSeconds).toBe(0);
-      expect(summary?.avgSpeedKmh).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    const summary = result.current.rideSummary;
+    expect(summary?.durationSeconds).toBe(0);
+    expect(summary?.avgSpeedKmh).toBeNull();
   });
 
   it("clears the summary when a new ride starts", () => {
@@ -205,7 +295,7 @@ describe("useRide end-of-ride summary", () => {
     );
 
     act(() => result.current.startRide());
-    fix(2, 0);
+    driveToEnd();
     act(() => result.current.stopRide());
     expect(result.current.rideSummary).not.toBeNull();
 
@@ -220,7 +310,7 @@ describe("useRide end-of-ride summary", () => {
     );
 
     act(() => result.current.startRide());
-    fix(2, 0);
+    driveToEnd();
     act(() => result.current.stopRide());
     expect(result.current.rideSummary).not.toBeNull();
 

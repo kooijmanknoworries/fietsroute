@@ -1,21 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe, Route } from "lucide-react";
+import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe } from "lucide-react";
 import {
   NetworkNode,
   NetworkSegment,
   GeoJsonGeometry,
-  useGetLfRoutes,
-  getGetLfRoutesQueryKey,
 } from "@workspace/api-client-react";
-import { keepPreviousData } from "@tanstack/react-query";
 import {
   getBaseLayer,
   setBaseLayer,
   getStreetStyle,
   setStreetStyle,
-  getLfRoutesEnabled,
-  setLfRoutesEnabled,
   STREET_STYLES,
   type BaseLayer,
   type StreetStyle,
@@ -248,6 +243,8 @@ export default function Map({
   const onBboxChangeRef = useRef(onBboxChange);
   const lastCenterRef = useRef<{ lon: number; lat: number } | null>(null);
   const rideMarkerRef = useRef<maplibregl.Marker | null>(null);
+  // Whether the one-time zoom-in to the road-following ride view has run.
+  const rideZoomAppliedRef = useRef(false);
   // Latest follow state, ride position, and pause callback, read from inside the
   // map's (once-registered) gesture handler so it always sees current values.
   const followRideRef = useRef(followRide);
@@ -265,26 +262,6 @@ export default function Map({
   streetStyleRef.current = streetStyle;
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const styleMenuRef = useRef<HTMLDivElement>(null);
-  const [lfEnabled, setLfEnabled] = useState<boolean>(() => getLfRoutesEnabled());
-  const lfEnabledRef = useRef<boolean>(lfEnabled);
-  lfEnabledRef.current = lfEnabled;
-  const [lfBbox, setLfBbox] = useState<string | null>(null);
-
-  // LF-routes overlay data: only fetched while the toggle is on, keyed on the
-  // same snapped viewport bbox as the network query so server-side caching is
-  // shared across pans within the same tiles.
-  const { data: lfRoutesData } = useGetLfRoutes(
-    { bbox: lfBbox ?? "" },
-    {
-      query: {
-        enabled: lfEnabled && !!lfBbox,
-        queryKey: getGetLfRoutesQueryKey({ bbox: lfBbox ?? "" }),
-        placeholderData: keepPreviousData,
-        staleTime: 5 * 60 * 1000,
-      },
-    },
-  );
-
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
   onBboxChangeRef.current = onBboxChange;
@@ -476,63 +453,6 @@ export default function Map({
         }
       });
 
-      // LF-routes overlay: long-distance cycling routes shown above the
-      // knooppunten segments but below the planned route. Hidden until the
-      // user enables the toggle; data is filled in by a separate effect.
-      m.addSource("lf-routes", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] }
-      });
-      m.addLayer({
-        id: "lf-routes-layer",
-        type: "line",
-        source: "lf-routes",
-        layout: {
-          "line-join": "round",
-          "line-cap": "round",
-          visibility: lfEnabledRef.current ? "visible" : "none"
-        },
-        paint: {
-          "line-color": "#d97706",
-          "line-width": 3,
-          "line-opacity": 0.75
-        }
-      });
-
-      // Hovering (or tapping, on touch devices) an LF-route line shows its
-      // name/ref in a small popup near the cursor.
-      const lfPopup = new maplibregl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        offset: 10,
-        maxWidth: "260px",
-      });
-      const showLfPopup = (e: maplibregl.MapLayerMouseEvent) => {
-        const feature = e.features?.[0];
-        if (!feature) return;
-        const name = feature.properties?.name as string | undefined;
-        const ref = feature.properties?.ref as string | undefined;
-        const label =
-          name && ref && !name.includes(ref)
-            ? `${ref} ${name}`
-            : name || ref;
-        if (!label) return;
-        const el = document.createElement("div");
-        el.className = "text-xs font-medium";
-        el.textContent = label;
-        lfPopup.setLngLat(e.lngLat).setDOMContent(el).addTo(m);
-      };
-      m.on("mouseenter", "lf-routes-layer", (e) => {
-        m.getCanvas().style.cursor = "pointer";
-        showLfPopup(e);
-      });
-      m.on("mousemove", "lf-routes-layer", showLfPopup);
-      m.on("mouseleave", "lf-routes-layer", () => {
-        m.getCanvas().style.cursor = "";
-        lfPopup.remove();
-      });
-      m.on("click", "lf-routes-layer", showLfPopup);
-
       m.addSource("imported-route", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] }
@@ -713,7 +633,6 @@ export default function Map({
         const east = snap(bounds.getEast(), "ceil");
         const north = snap(bounds.getNorth(), "ceil");
         const bboxStr = `${west},${south},${east},${north}`;
-        setLfBbox(bboxStr);
 
         // Work out which way the user just panned by comparing the new view
         // centre with the previous settled centre. The resulting (dx, dy)
@@ -776,67 +695,6 @@ export default function Map({
       m.off("load", apply);
     };
   }, [baseLayer, streetStyle]);
-
-  // Keep the LF-routes layer visibility in sync with the toggle.
-  useEffect(() => {
-    if (!map.current) return;
-    const m = map.current;
-    const apply = () => {
-      if (m.getLayer("lf-routes-layer")) {
-        m.setLayoutProperty(
-          "lf-routes-layer",
-          "visibility",
-          lfEnabled ? "visible" : "none",
-        );
-      }
-    };
-    if (m.isStyleLoaded()) {
-      apply();
-      return;
-    }
-    m.once("load", apply);
-    return () => {
-      m.off("load", apply);
-    };
-  }, [lfEnabled]);
-
-  // Push fetched LF-route geometries into the map source. One feature per
-  // route line keeps hover hit-testing simple while carrying name/ref props.
-  useEffect(() => {
-    if (!map.current) return;
-    const m = map.current;
-    const apply = () => {
-      const source = m.getSource("lf-routes") as maplibregl.GeoJSONSource | undefined;
-      if (!source) return;
-      source.setData({
-        type: "FeatureCollection",
-        features: (lfRoutesData?.routes ?? []).flatMap((route) =>
-          route.lines.map((line, i) => ({
-            type: "Feature" as const,
-            id: `${route.id}-${i}`,
-            properties: { id: route.id, name: route.name, ref: route.ref },
-            geometry: { type: "LineString" as const, coordinates: line },
-          })),
-        ),
-      });
-    };
-    if (m.isStyleLoaded()) {
-      apply();
-      return;
-    }
-    m.once("load", apply);
-    return () => {
-      m.off("load", apply);
-    };
-  }, [lfRoutesData]);
-
-  const toggleLfRoutes = useCallback(() => {
-    setLfEnabled((prev) => {
-      const next = !prev;
-      setLfRoutesEnabled(next);
-      return next;
-    });
-  }, []);
 
   const toggleBaseLayer = useCallback((next: BaseLayer) => {
     setBaseLayerState(next);
@@ -1063,6 +921,7 @@ export default function Map({
     if (!ridePosition) {
       rideMarkerRef.current?.remove();
       rideMarkerRef.current = null;
+      rideZoomAppliedRef.current = false;
       return;
     }
 
@@ -1071,12 +930,19 @@ export default function Map({
     if (!rideMarkerRef.current) {
       const el = document.createElement("div");
       el.className = "ride-position-marker";
-      el.style.width = "18px";
-      el.style.height = "18px";
+      el.style.width = "34px";
+      el.style.height = "34px";
       el.style.borderRadius = "9999px";
       el.style.background = "#2563eb";
       el.style.border = "3px solid #ffffff";
       el.style.boxShadow = "0 0 0 2px rgba(37,99,235,0.4)";
+      el.style.display = "flex";
+      el.style.alignItems = "center";
+      el.style.justifyContent = "center";
+      // Cyclist glyph (Lucide "bike" outline) so the moving marker reads as
+      // "you, on your bike" rather than an anonymous dot.
+      el.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>';
       rideMarkerRef.current = new maplibregl.Marker({ element: el });
     }
 
@@ -1085,7 +951,18 @@ export default function Map({
       .addTo(m);
 
     if (followRide && typeof m.easeTo === "function") {
-      m.easeTo({ center: [ridePosition[0], ridePosition[1]], duration: 800 });
+      if (!rideZoomAppliedRef.current) {
+        // First fix of the ride: zoom to a close road-following view
+        // (~200 m across, like cycling navigation apps).
+        rideZoomAppliedRef.current = true;
+        m.easeTo({
+          center: [ridePosition[0], ridePosition[1]],
+          zoom: 16.5,
+          duration: 1200,
+        });
+      } else {
+        m.easeTo({ center: [ridePosition[0], ridePosition[1]], duration: 800 });
+      }
     }
   }, [ridePosition, followRide]);
 
@@ -1126,20 +1003,6 @@ export default function Map({
       )}
       {!mapError && (
         <div className="absolute right-3 top-3 z-10 flex flex-wrap items-start justify-end gap-2 max-w-[calc(100%-6rem)]">
-          <button
-            type="button"
-            onClick={toggleLfRoutes}
-            aria-pressed={lfEnabled}
-            title={t("map.lfRoutesTitle")}
-            className={
-              "flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium shadow-md backdrop-blur transition-colors " +
-              (lfEnabled
-                ? "bg-primary text-primary-foreground"
-                : "bg-card/95 text-muted-foreground hover:bg-accent")
-            }
-          >
-            <Route className="h-3.5 w-3.5" /> {t("map.lfRoutes")}
-          </button>
           {baseLayer === "map" && (
             <div className="relative" ref={styleMenuRef}>
               <button
@@ -1148,9 +1011,12 @@ export default function Map({
                 aria-haspopup="menu"
                 aria-expanded={styleMenuOpen}
                 title={t("map.styleTitle")}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent"
+                className="flex items-center gap-1.5 rounded-md border border-border bg-card/95 px-2 py-1.5 text-xs font-medium text-muted-foreground shadow-md backdrop-blur transition-colors hover:bg-accent sm:px-3"
               >
-                <Palette className="h-3.5 w-3.5" /> {t(`map.style.${streetStyle}`)}
+                <Palette className="h-3.5 w-3.5" />{" "}
+                <span className="hidden sm:inline">
+                  {t(`map.style.${streetStyle}`)}
+                </span>
               </button>
               {styleMenuOpen && (
                 <div
@@ -1189,13 +1055,14 @@ export default function Map({
               aria-pressed={baseLayer === "map"}
               title={t("map.streetTitle")}
               className={
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
+                "flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 " +
                 (baseLayer === "map"
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent")
               }
             >
-              <MapIcon className="h-3.5 w-3.5" /> {t("map.street")}
+              <MapIcon className="h-3.5 w-3.5" />{" "}
+              <span className="hidden sm:inline">{t("map.street")}</span>
             </button>
             <button
               type="button"
@@ -1203,13 +1070,14 @@ export default function Map({
               aria-pressed={baseLayer === "satellite"}
               title={t("map.satelliteTitle")}
               className={
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors " +
+                "flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-colors sm:px-3 " +
                 (baseLayer === "satellite"
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:bg-accent")
               }
             >
-              <Satellite className="h-3.5 w-3.5" /> {t("map.satellite")}
+              <Satellite className="h-3.5 w-3.5" />{" "}
+              <span className="hidden sm:inline">{t("map.satellite")}</span>
             </button>
           </div>
         </div>
