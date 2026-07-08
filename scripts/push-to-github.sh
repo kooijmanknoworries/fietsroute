@@ -17,9 +17,28 @@
 # reports success/failure based on what GitHub actually has.
 set -u
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RENEW_MSG="To renew: create a new fine-grained PAT at https://github.com/settings/personal-access-tokens with Contents: read/write on kooijmanknoworries/fietsroute, then update the GITHUB_PUSH_TOKEN secret in the Replit Secrets tab."
+
 if [ -z "${GITHUB_PUSH_TOKEN:-}" ]; then
   echo "ERROR: GITHUB_PUSH_TOKEN is not set. Add it in the Secrets tab (fine-grained PAT, Contents: read/write)." >&2
+  echo "$RENEW_MSG" >&2
   exit 1
+fi
+
+# Preflight: fail fast with clear renewal instructions if the token is
+# expired/invalid, instead of a cryptic git auth error mid-push.
+# (check-github-token.sh exits 2 for "expires soon" and 3 for "API
+# unreachable / status unknown" — both warn but continue with the push.)
+if [ -x "$SCRIPT_DIR/check-github-token.sh" ]; then
+  "$SCRIPT_DIR/check-github-token.sh"
+  CHECK_STATUS=$?
+  if [ $CHECK_STATUS -eq 1 ]; then
+    echo "ABORTING: GITHUB_PUSH_TOKEN failed validation; not attempting the push." >&2
+    exit 1
+  elif [ $CHECK_STATUS -eq 3 ]; then
+    echo "Continuing with the push despite unknown token status." >&2
+  fi
 fi
 
 ASKPASS="$(mktemp /tmp/gh-askpass.XXXXXX)"
@@ -62,6 +81,8 @@ if [ "$REMOTE_SHA" = "$LOCAL_SHA" ]; then
 fi
 if [ $PUSH_STATUS -ne 0 ]; then
   echo "FAILED: push failed and remote does not match local HEAD." >&2
+  echo "If the error above mentions 'Invalid username or token' or authentication, the GITHUB_PUSH_TOKEN has likely expired." >&2
+  echo "$RENEW_MSG" >&2
   exit 1
 fi
 echo "WARNING: push reported success but remote main != local HEAD (non-main ref pushed?)."
