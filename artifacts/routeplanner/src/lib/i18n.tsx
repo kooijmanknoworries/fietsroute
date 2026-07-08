@@ -83,6 +83,16 @@ const en = {
   "route.totalDistance": "Total Distance:",
   "route.saveRoute": "Save route",
   "route.nodesCount": "{count} nodes",
+  "route.emptyHintOffgrid": "Click anywhere on the map to add a free waypoint. The route follows bike-friendly roads and paths.",
+  "route.freePoint": "Free waypoint (offgrid)",
+  "route.offgridLeg": "Offgrid leg (outside the node network)",
+
+  "mode.label": "Planning mode",
+  "mode.network": "Nodes",
+  "mode.networkTitle": "Plan via numbered cycling nodes",
+  "mode.offgrid": "Offgrid",
+  "mode.offgridTitle": "Plan via free points anywhere on the map",
+  "mode.offgridHint": "Offgrid mode: click anywhere on the map. Legs to free points follow bike-friendly roads and are drawn dashed in orange.",
 
   "elevation.title": "Elevation profile",
   "elevation.ascent": "Climb",
@@ -250,6 +260,16 @@ const nl: Record<TranslationKey, string> = {
   "elevation.loading": "Hoogteprofiel laden…",
   "elevation.error": "Kon het hoogteprofiel niet laden.",
 
+  "route.emptyHintOffgrid": "Klik ergens op de kaart om een vrij punt toe te voegen. De route volgt fietsvriendelijke wegen en paden.",
+  "route.freePoint": "Vrij punt (offgrid)",
+  "route.offgridLeg": "Offgrid-etappe (buiten het knooppuntennetwerk)",
+
+  "mode.label": "Planmodus",
+  "mode.network": "Knooppunten",
+  "mode.networkTitle": "Plan via genummerde knooppunten",
+  "mode.offgrid": "Offgrid",
+  "mode.offgridTitle": "Plan via vrije punten overal op de kaart",
+  "mode.offgridHint": "Offgrid-modus: klik ergens op de kaart. Etappes naar vrije punten volgen fietsvriendelijke wegen en worden oranje gestreept getekend.",
   "ride.start": "Rit starten",
   "ride.stop": "Rit stoppen",
   "ride.riding": "Rit bezig",

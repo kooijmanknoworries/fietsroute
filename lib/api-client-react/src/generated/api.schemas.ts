@@ -78,17 +78,44 @@ export interface NetworkDatasetStatus {
   oldestDataAgeHours: number | null;
 }
 
+/**
+ * Waypoint kind: "node" is a numbered knooppunt on the network (default); "free" is an arbitrary map point routed offgrid over all cycle-friendly ways.
+
+ */
+export type RouteRequestNodeKind = typeof RouteRequestNodeKind[keyof typeof RouteRequestNodeKind];
+
+
+export const RouteRequestNodeKind = {
+  node: 'node',
+  free: 'free',
+} as const;
+
 export interface RouteRequestNode {
   id: string;
   ref: string;
   lat: number;
   lon: number;
+  /** Waypoint kind: "node" is a numbered knooppunt on the network (default); "free" is an arbitrary map point routed offgrid over all cycle-friendly ways.
+   */
+  kind?: RouteRequestNodeKind;
 }
 
 export interface RouteRequest {
   /** Ordered list of selected nodes to route through. */
   nodes: RouteRequestNode[];
 }
+
+/**
+ * How this leg was routed: "network" follows the numbered node network (default); "offgrid" was routed over general cycle-friendly ways between arbitrary points.
+
+ */
+export type RouteLegMode = typeof RouteLegMode[keyof typeof RouteLegMode];
+
+
+export const RouteLegMode = {
+  network: 'network',
+  offgrid: 'offgrid',
+} as const;
 
 /**
  * One leg of the route between two consecutive nodes.
@@ -98,6 +125,9 @@ export interface RouteLeg {
   toRef: string;
   distanceMeters: number;
   coordinates: number[][];
+  /** How this leg was routed: "network" follows the numbered node network (default); "offgrid" was routed over general cycle-friendly ways between arbitrary points.
+   */
+  mode?: RouteLegMode;
 }
 
 export interface RoutePlan {

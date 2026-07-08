@@ -71,7 +71,8 @@ function MapScreenInner() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { selectedNodes, routePlan, isPlanning, addNode } = useRoutePlanner();
+  const { selectedNodes, routePlan, isPlanning, addNode, addFreePoint, planMode, setPlanMode } =
+    useRoutePlanner();
   const { isRiding, ridePosition, rideSummary, dismissRideSummary } = useRideContext();
   const mapRef = useRef<MapView>(null);
 
@@ -105,6 +106,20 @@ function MapScreenInner() {
       addNode(node);
     },
     [addNode, isRiding]
+  );
+
+  // Offgrid mode: a tap on the bare map adds a free waypoint. Node markers
+  // call stopPropagation via their own onPress, and react-native-maps only
+  // fires onPress for taps that didn't hit a marker.
+  const handleMapPress = useCallback(
+    (e: { nativeEvent: { coordinate?: { latitude: number; longitude: number } } }) => {
+      if (planMode !== "offgrid") return;
+      if (!isPlanningTapAllowed({ isRiding })) return;
+      const coord = e.nativeEvent?.coordinate;
+      if (!coord) return;
+      addFreePoint(coord.latitude, coord.longitude);
+    },
+    [planMode, isRiding, addFreePoint]
   );
 
   const handleSelectRegion = useCallback((region: Region2) => {
@@ -174,6 +189,7 @@ function MapScreenInner() {
         style={StyleSheet.absoluteFillObject}
         initialRegion={INITIAL_REGION}
         onRegionChangeComplete={handleRegionChangeComplete}
+        onPress={handleMapPress}
         showsUserLocation
         showsMyLocationButton={false}
         showsCompass={false}
@@ -222,14 +238,29 @@ function MapScreenInner() {
             );
           })}
 
-        {routeCoords.length > 1 && (
-          <Polyline
-            coordinates={routeCoords}
-            strokeColor={colors.primary}
-            strokeWidth={4}
-            lineDashPattern={undefined}
-          />
-        )}
+        {routePlan?.legs?.length
+          ? routePlan.legs.map((leg, i) =>
+              leg.coordinates.length > 1 ? (
+                <Polyline
+                  key={`leg-${i}`}
+                  coordinates={leg.coordinates.map(([lon, lat]) => ({
+                    latitude: lat,
+                    longitude: lon,
+                  }))}
+                  strokeColor={leg.mode === "offgrid" ? "#d97706" : colors.primary}
+                  strokeWidth={4}
+                  lineDashPattern={leg.mode === "offgrid" ? [8, 6] : undefined}
+                />
+              ) : null
+            )
+          : routeCoords.length > 1 && (
+              <Polyline
+                coordinates={routeCoords}
+                strokeColor={colors.primary}
+                strokeWidth={4}
+                lineDashPattern={undefined}
+              />
+            )}
 
         {selectedNodes.map((node) => (
           <Marker
@@ -238,16 +269,27 @@ function MapScreenInner() {
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={10}
           >
-            <View
-              style={[
-                styles.selectedMarker,
-                { backgroundColor: colors.primary, borderColor: "#ffffff" },
-              ]}
-            >
-              <Text style={[styles.selectedMarkerText, { fontFamily: "Inter_700Bold" }]}>
-                {node.ref}
-              </Text>
-            </View>
+            {node.kind === "free" ? (
+              <View
+                style={[
+                  styles.freeMarker,
+                  { backgroundColor: "#d97706", borderColor: "#ffffff" },
+                ]}
+              >
+                <Ionicons name="navigate" size={14} color="#ffffff" />
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.selectedMarker,
+                  { backgroundColor: colors.primary, borderColor: "#ffffff" },
+                ]}
+              >
+                <Text style={[styles.selectedMarkerText, { fontFamily: "Inter_700Bold" }]}>
+                  {node.ref}
+                </Text>
+              </View>
+            )}
           </Marker>
         ))}
 
@@ -270,6 +312,84 @@ function MapScreenInner() {
           onSelectRegion={handleSelectRegion}
           onSelectMunicipality={handleSelectMunicipality}
         />
+      )}
+
+      {!isRiding && (
+        <View
+          style={[
+            styles.modeToggle,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              top: topPad + 64,
+              right: 16,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => setPlanMode("network")}
+            style={[
+              styles.modeBtn,
+              planMode === "network" && { backgroundColor: colors.primary },
+            ]}
+            testID="mode-network"
+          >
+            <Text
+              style={[
+                styles.modeBtnText,
+                {
+                  color: planMode === "network" ? "#ffffff" : colors.mutedForeground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              Knooppunt
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setPlanMode("offgrid")}
+            style={[
+              styles.modeBtn,
+              planMode === "offgrid" && { backgroundColor: "#d97706" },
+            ]}
+            testID="mode-offgrid"
+          >
+            <Text
+              style={[
+                styles.modeBtnText,
+                {
+                  color: planMode === "offgrid" ? "#ffffff" : colors.mutedForeground,
+                  fontFamily: "Inter_600SemiBold",
+                },
+              ]}
+            >
+              Offgrid
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {planMode === "offgrid" && !isRiding && (
+        <View
+          style={[
+            styles.offgridHint,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              top: topPad + 110,
+            },
+          ]}
+        >
+          <Ionicons name="navigate-outline" size={14} color="#d97706" />
+          <Text
+            style={[
+              styles.zoomHintText,
+              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+            ]}
+          >
+            Tik op de kaart voor een vrij punt
+          </Text>
+        </View>
       )}
 
       {!isRiding && (
@@ -375,6 +495,54 @@ const styles = StyleSheet.create({
   selectedMarkerText: {
     fontSize: 13,
     color: "#ffffff",
+  },
+  freeMarker: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modeToggle: {
+    position: "absolute",
+    flexDirection: "row",
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  modeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modeBtnText: {
+    fontSize: 12,
+  },
+  offgridHint: {
+    position: "absolute",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    right: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
   ridePositionOuter: {
     width: 34,

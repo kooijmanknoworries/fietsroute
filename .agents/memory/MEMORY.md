@@ -38,5 +38,6 @@
 - [Expo Go deep link needs base path](expo-go-deeplink-basepath.md) — under shared-domain path routing, the `/mobile` landing `exps://` deep link must include BASE_PATH or Expo Go loads the sibling web app at `/` instead of the manifest.
 - [Azure deploy & Clerk proxy](azure-clerk-deploy.md) — blank Azure web app = Clerk proxy ON with a dev key (proxy is prod-only); deploy builds from GitHub (not workspace), empty build-args drop to Dockerfile ARG default, ACA needs a new SHA to roll.
 - [Elevation profile service](elevation-profile.md) — elevation cached by sampled-coord hash (`elev:` keys, clear in tests); stub ResizeObserver for recharts in jsdom.
+- [Offgrid OSRM routing](offgrid-osrm-routing.md) — free-point legs routed via external OSRM bike router; NoRoute→422, `osrm:` cache prefix, tests must clear those rows; dashed amber in UIs.
 - [Azure deployment topology](azure-deployment.md) — /, /api, /mobile must share one public domain (nginx entrypoint path-routes); api dist is self-contained; mobile bundles bake the domain in at build.
 - [renderHook prop identity](renderhook-prop-identity.md) — per-render fixture objects trip identity-keyed effects in hooks under test; hoist fixtures so props stay referentially stable.

@@ -27,8 +27,10 @@ interface Bounds {
 interface MapProps {
   nodes: NetworkNode[];
   segments: NetworkSegment[];
-  selectedNodes: NetworkNode[];
+  selectedNodes: (NetworkNode & { kind?: "node" | "free" })[];
   routeCoordinates: number[][] | null;
+  /** Per-leg route geometry; offgrid legs are drawn dashed. */
+  routeLegs?: { coordinates: number[][]; mode?: string }[] | null;
   importedCoordinates: number[][] | null;
   boundaryGeometry?: GeoJsonGeometry | null;
   onBboxChange: (
@@ -36,6 +38,8 @@ interface MapProps {
     direction: { dx: number; dy: number } | null,
   ) => void;
   onNodeClick: (node: NetworkNode) => void;
+  /** Called with [lon, lat] when the user clicks the bare map (offgrid mode). */
+  onMapClick?: (lon: number, lat: number) => void;
   onRecenter?: () => void;
   flyToRegion?: { lat: number; lon: number; zoom: number } | null;
   initialBounds?: Bounds | null;
@@ -220,10 +224,12 @@ export default function Map({
   segments,
   selectedNodes,
   routeCoordinates,
+  routeLegs,
   importedCoordinates,
   boundaryGeometry,
   onBboxChange,
   onNodeClick,
+  onMapClick,
   onRecenter,
   flyToRegion,
   initialBounds,
@@ -265,6 +271,8 @@ export default function Map({
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
   onBboxChangeRef.current = onBboxChange;
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   useEffect(() => {
     if (map.current || !mapContainer.current) return;
@@ -480,6 +488,7 @@ export default function Map({
         id: "planned-route-layer",
         type: "line",
         source: "planned-route",
+        filter: ["!=", ["get", "mode"], "offgrid"],
         layout: {
           "line-join": "round",
           "line-cap": "round"
@@ -487,6 +496,41 @@ export default function Map({
         paint: {
           "line-color": "#e11d48",
           "line-width": 5
+        }
+      });
+
+      // Offgrid legs share the planned-route source but render dashed in a
+      // distinct colour, since line-dasharray isn't data-driven in MapLibre.
+      m.addLayer({
+        id: "planned-route-offgrid-layer",
+        type: "line",
+        source: "planned-route",
+        filter: ["==", ["get", "mode"], "offgrid"],
+        layout: {
+          "line-join": "round",
+          "line-cap": "round"
+        },
+        paint: {
+          "line-color": "#d97706",
+          "line-width": 5,
+          "line-dasharray": [1.5, 1.5]
+        }
+      });
+
+      // Free (offgrid) waypoints the user clicked directly on the map.
+      m.addSource("free-points", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      m.addLayer({
+        id: "free-points-layer",
+        type: "circle",
+        source: "free-points",
+        paint: {
+          "circle-radius": 8,
+          "circle-color": "#d97706",
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#ffffff"
         }
       });
 
@@ -593,6 +637,23 @@ export default function Map({
             onNodeClickRef.current(node);
           }
         }
+      });
+
+      // Bare-map clicks add a free offgrid waypoint. Skip clicks that landed
+      // on a knooppunt circle so node selection keeps priority.
+      m.on("click", (e) => {
+        if (!onMapClickRef.current) return;
+        if (typeof m.queryRenderedFeatures === "function" && m.getLayer?.("nodes-layer-circle")) {
+          try {
+            const hits = m.queryRenderedFeatures(e.point, {
+              layers: ["nodes-layer-circle"],
+            });
+            if (hits.length > 0) return;
+          } catch {
+            // Headless test map: fall through and treat as bare-map click.
+          }
+        }
+        onMapClickRef.current(e.lngLat.lng, e.lngLat.lat);
       });
 
       // Hide the cycling nodes (knooppunten) once the visible map area is wider
@@ -836,13 +897,49 @@ export default function Map({
 
     const routeSource = m.getSource("planned-route") as maplibregl.GeoJSONSource;
     if (routeSource) {
+      // Prefer per-leg geometry so offgrid legs can render dashed; fall back
+      // to the single merged line for plans without leg data.
+      const legFeatures =
+        routeLegs && routeLegs.length > 0
+          ? routeLegs
+              .filter((leg) => leg.coordinates.length > 1)
+              .map((leg) => ({
+                type: "Feature" as const,
+                properties: { mode: leg.mode ?? "network" },
+                geometry: {
+                  type: "LineString" as const,
+                  coordinates: leg.coordinates,
+                },
+              }))
+          : routeCoordinates && routeCoordinates.length > 0
+            ? [
+                {
+                  type: "Feature" as const,
+                  properties: { mode: "network" },
+                  geometry: {
+                    type: "LineString" as const,
+                    coordinates: routeCoordinates,
+                  },
+                },
+              ]
+            : [];
       routeSource.setData({
         type: "FeatureCollection",
-        features: routeCoordinates && routeCoordinates.length > 0 ? [{
-          type: "Feature",
-          properties: {},
-          geometry: { type: "LineString", coordinates: routeCoordinates }
-        }] : []
+        features: legFeatures,
+      });
+    }
+
+    const freeSource = m.getSource("free-points") as maplibregl.GeoJSONSource;
+    if (freeSource) {
+      freeSource.setData({
+        type: "FeatureCollection",
+        features: selectedNodes
+          .filter((n) => n.kind === "free")
+          .map((n) => ({
+            type: "Feature" as const,
+            properties: { id: n.id },
+            geometry: { type: "Point" as const, coordinates: [n.lon, n.lat] },
+          })),
       });
     }
     
@@ -858,7 +955,7 @@ export default function Map({
       });
     }
 
-  }, [selectedNodes, routeCoordinates, importedCoordinates, nodes]);
+  }, [selectedNodes, routeCoordinates, routeLegs, importedCoordinates, nodes]);
 
   // Push the ride's travelled polyline and lock markers into their sources.
   useEffect(() => {

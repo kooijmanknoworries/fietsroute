@@ -70,7 +70,8 @@ export const PlanRouteBody = zod.object({
   "id": zod.string(),
   "ref": zod.string(),
   "lat": zod.number(),
-  "lon": zod.number()
+  "lon": zod.number(),
+  "kind": zod.enum(['node', 'free']).optional().describe('Waypoint kind: \"node\" is a numbered knooppunt on the network (default); \"free\" is an arbitrary map point routed offgrid over all cycle-friendly ways.\n')
 })).describe('Ordered list of selected nodes to route through.')
 })
 
@@ -82,7 +83,8 @@ export const PlanRouteResponse = zod.object({
   "fromRef": zod.string(),
   "toRef": zod.string(),
   "distanceMeters": zod.number(),
-  "coordinates": zod.array(zod.array(zod.number()))
+  "coordinates": zod.array(zod.array(zod.number())),
+  "mode": zod.enum(['network', 'offgrid']).optional().describe('How this leg was routed: \"network\" follows the numbered node network (default); \"offgrid\" was routed over general cycle-friendly ways between arbitrary points.\n')
 }).describe('One leg of the route between two consecutive nodes.'))
 })
 
@@ -178,7 +180,8 @@ export const SaveRouteBody = zod.object({
   "id": zod.string(),
   "ref": zod.string(),
   "lat": zod.number(),
-  "lon": zod.number()
+  "lon": zod.number(),
+  "kind": zod.enum(['node', 'free']).optional().describe('Waypoint kind: \"node\" is a numbered knooppunt on the network (default); \"free\" is an arbitrary map point routed offgrid over all cycle-friendly ways.\n')
 })).describe('The ordered selected nodes, so the route can be reopened for editing.'),
   "plan": zod.object({
   "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
@@ -188,7 +191,8 @@ export const SaveRouteBody = zod.object({
   "fromRef": zod.string(),
   "toRef": zod.string(),
   "distanceMeters": zod.number(),
-  "coordinates": zod.array(zod.array(zod.number()))
+  "coordinates": zod.array(zod.array(zod.number())),
+  "mode": zod.enum(['network', 'offgrid']).optional().describe('How this leg was routed: \"network\" follows the numbered node network (default); \"offgrid\" was routed over general cycle-friendly ways between arbitrary points.\n')
 }).describe('One leg of the route between two consecutive nodes.'))
 })
 })
@@ -222,7 +226,8 @@ export const GetSavedRouteResponse = zod.object({
   "id": zod.string(),
   "ref": zod.string(),
   "lat": zod.number(),
-  "lon": zod.number()
+  "lon": zod.number(),
+  "kind": zod.enum(['node', 'free']).optional().describe('Waypoint kind: \"node\" is a numbered knooppunt on the network (default); \"free\" is an arbitrary map point routed offgrid over all cycle-friendly ways.\n')
 })),
   "plan": zod.object({
   "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
@@ -232,7 +237,8 @@ export const GetSavedRouteResponse = zod.object({
   "fromRef": zod.string(),
   "toRef": zod.string(),
   "distanceMeters": zod.number(),
-  "coordinates": zod.array(zod.array(zod.number()))
+  "coordinates": zod.array(zod.array(zod.number())),
+  "mode": zod.enum(['network', 'offgrid']).optional().describe('How this leg was routed: \"network\" follows the numbered node network (default); \"offgrid\" was routed over general cycle-friendly ways between arbitrary points.\n')
 }).describe('One leg of the route between two consecutive nodes.'))
 }),
   "createdAt": zod.coerce.date()
@@ -257,7 +263,8 @@ export const UpdateSavedRouteResponse = zod.object({
   "id": zod.string(),
   "ref": zod.string(),
   "lat": zod.number(),
-  "lon": zod.number()
+  "lon": zod.number(),
+  "kind": zod.enum(['node', 'free']).optional().describe('Waypoint kind: \"node\" is a numbered knooppunt on the network (default); \"free\" is an arbitrary map point routed offgrid over all cycle-friendly ways.\n')
 })),
   "plan": zod.object({
   "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
@@ -267,7 +274,8 @@ export const UpdateSavedRouteResponse = zod.object({
   "fromRef": zod.string(),
   "toRef": zod.string(),
   "distanceMeters": zod.number(),
-  "coordinates": zod.array(zod.array(zod.number()))
+  "coordinates": zod.array(zod.array(zod.number())),
+  "mode": zod.enum(['network', 'offgrid']).optional().describe('How this leg was routed: \"network\" follows the numbered node network (default); \"offgrid\" was routed over general cycle-friendly ways between arbitrary points.\n')
 }).describe('One leg of the route between two consecutive nodes.'))
 }),
   "createdAt": zod.coerce.date()

@@ -7,7 +7,11 @@ export interface NetworkNode {
   ref: string;
   lat: number;
   lon: number;
+  /** "node" (default) = numbered knooppunt; "free" = arbitrary offgrid point. */
+  kind?: "node" | "free";
 }
+
+export type PlanMode = "network" | "offgrid";
 
 export interface RoutePlan {
   nodeRefs: string[];
@@ -18,6 +22,7 @@ export interface RoutePlan {
     toRef: string;
     distanceMeters: number;
     coordinates: number[][];
+    mode?: "network" | "offgrid";
   }>;
 }
 
@@ -26,7 +31,10 @@ interface RoutePlannerState {
   routePlan: RoutePlan | null;
   isPlanning: boolean;
   planError: string | null;
+  planMode: PlanMode;
+  setPlanMode: (mode: PlanMode) => void;
   addNode: (node: NetworkNode) => void;
+  addFreePoint: (lat: number, lon: number) => void;
   removeNode: (nodeId: string) => void;
   clearRoute: () => void;
   undoLastNode: () => void;
@@ -40,6 +48,7 @@ export function RoutePlannerProvider({ children }: { children: React.ReactNode }
   const [routePlan, setRoutePlan] = useState<RoutePlan | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
+  const [planMode, setPlanMode] = useState<PlanMode>("network");
 
   // Generation counter — increments on every intent change so stale
   // responses from older in-flight requests are silently dropped.
@@ -68,6 +77,7 @@ export function RoutePlannerProvider({ children }: { children: React.ReactNode }
           ref: n.ref,
           lat: n.lat,
           lon: n.lon,
+          ...(n.kind ? { kind: n.kind } : {}),
         })),
       });
 
@@ -89,6 +99,27 @@ export function RoutePlannerProvider({ children }: { children: React.ReactNode }
     (node: NetworkNode) => {
       setSelectedNodes((prev) => {
         if (prev.some((n) => n.id === node.id)) return prev;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const next = [...prev, node];
+        planRouteForNodes(next);
+        return next;
+      });
+    },
+    [planRouteForNodes]
+  );
+
+  // Offgrid mode: add an arbitrary map point as a free waypoint, routed over
+  // all cycle-friendly ways instead of the node network.
+  const addFreePoint = useCallback(
+    (lat: number, lon: number) => {
+      const node: NetworkNode = {
+        id: `free-${Date.now()}-${Math.round(lon * 1e5)}-${Math.round(lat * 1e5)}`,
+        ref: "",
+        lat,
+        lon,
+        kind: "free",
+      };
+      setSelectedNodes((prev) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         const next = [...prev, node];
         planRouteForNodes(next);
@@ -147,7 +178,10 @@ export function RoutePlannerProvider({ children }: { children: React.ReactNode }
         routePlan,
         isPlanning,
         planError,
+        planMode,
+        setPlanMode,
         addNode,
+        addFreePoint,
         removeNode,
         clearRoute,
         undoLastNode,

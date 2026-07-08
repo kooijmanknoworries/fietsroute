@@ -21,6 +21,15 @@ import {
   RoutePlan,
 } from "@workspace/api-client-react";
 
+// Planning mode: "network" adds numbered knooppunten only (classic behavior);
+// "offgrid" lets the user click arbitrary map points that are routed over all
+// cycle-friendly ways. Both waypoint kinds can be mixed freely in one route.
+export type PlanMode = "network" | "offgrid";
+
+// A waypoint in the planned route: either a knooppunt from the network
+// (kind omitted / "node") or a free offgrid point (kind "free").
+export type PlannedNode = NetworkNode & { kind?: "node" | "free" };
+
 function viewportForCoordinates(
   coordinates: number[][],
 ): { lat: number; lon: number; zoom: number } | null {
@@ -227,9 +236,12 @@ export function useRoutePlanner() {
     [],
   );
   
-  const [selectedNodes, setSelectedNodes] = useState<NetworkNode[]>([]);
+  const [selectedNodes, setSelectedNodes] = useState<PlannedNode[]>([]);
   const [routePlan, setRoutePlan] = useState<RoutePlan | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
+  const [planMode, setPlanMode] = useState<PlanMode>("network");
+  const planModeRef = useRef(planMode);
+  planModeRef.current = planMode;
   
   const [importedCoordinates, setImportedCoordinates] = useState<number[][] | null>(null);
   const [flyToRegion, setFlyToRegion] = useState<{ lat: number; lon: number; zoom: number } | null>(null);
@@ -419,6 +431,36 @@ export function useRoutePlanner() {
     });
   }, [planRoute, messageForRouteError]);
 
+  // In offgrid mode, a click anywhere on the map adds a free waypoint that is
+  // routed over all cycle-friendly ways instead of the node network.
+  const handleMapClick = useCallback(
+    (lon: number, lat: number) => {
+      if (planModeRef.current !== "offgrid") return;
+      const freeNode: PlannedNode = {
+        id: `free-${Date.now()}-${Math.round(lon * 1e5)}-${Math.round(lat * 1e5)}`,
+        ref: "",
+        lat,
+        lon,
+        kind: "free",
+      };
+      setSelectedNodes((prev) => {
+        const newSelection = [...prev, freeNode];
+        if (newSelection.length >= 2) {
+          setRouteError(null);
+          planRoute.mutate(
+            { data: { nodes: newSelection } },
+            {
+              onSuccess: (plan) => setRoutePlan(plan),
+              onError: (err) => setRouteError(messageForRouteError(err)),
+            },
+          );
+        }
+        return newSelection;
+      });
+    },
+    [planRoute, messageForRouteError],
+  );
+
   const handleUndo = useCallback(() => {
     setSelectedNodes(prev => {
       const newSelection = prev.slice(0, -1);
@@ -473,6 +515,7 @@ export function useRoutePlanner() {
               ref: n.ref,
               lat: n.lat,
               lon: n.lon,
+              ...(n.kind ? { kind: n.kind } : {}),
             })),
             plan: routePlan,
           },
@@ -501,7 +544,7 @@ export function useRoutePlanner() {
     setOpeningRouteId(id);
     try {
       const route = await getSavedRoute(id);
-      setSelectedNodes(route.nodes as NetworkNode[]);
+      setSelectedNodes(route.nodes as PlannedNode[]);
       setRoutePlan(route.plan);
       setRouteError(null);
       setImportedCoordinates(null);
@@ -567,6 +610,9 @@ export function useRoutePlanner() {
     flyToRegion,
     setFlyToRegion,
     handleNodeClick,
+    handleMapClick,
+    planMode,
+    setPlanMode,
     handleUndo,
     handleClear,
     savedRoutes,

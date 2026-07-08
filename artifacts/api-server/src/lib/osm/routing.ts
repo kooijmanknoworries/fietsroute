@@ -5,6 +5,11 @@ import {
   type OverpassResult,
 } from "./overpass";
 import { getNetworkForRoute } from "./dataset";
+import {
+  routeOffgridLeg,
+  OffgridNoPathError,
+  OffgridRoutingError,
+} from "./offgrid";
 import { logger } from "../logger";
 
 export interface RouteRequestNode {
@@ -12,6 +17,8 @@ export interface RouteRequestNode {
   ref: string;
   lat: number;
   lon: number;
+  /** "node" (default) = numbered knooppunt; "free" = arbitrary offgrid point. */
+  kind?: "node" | "free";
 }
 
 export interface RouteLeg {
@@ -19,6 +26,8 @@ export interface RouteLeg {
   toRef: string;
   distanceMeters: number;
   coordinates: number[][];
+  /** "network" (default) = along the node network; "offgrid" = free routing. */
+  mode?: "network" | "offgrid";
 }
 
 export interface RoutePlan {
@@ -206,16 +215,51 @@ function resolveVertex(
 
 type ResolvedVertex = { id: number; dist: number } | null;
 
+function isFree(node: RouteRequestNode): boolean {
+  return node.kind === "free";
+}
+
+// A leg is routed offgrid when either endpoint is a free (non-network) point.
+function isOffgridLeg(from: RouteRequestNode, to: RouteRequestNode): boolean {
+  return isFree(from) || isFree(to);
+}
+
+// Free waypoints never need to snap onto the node network, so they are left
+// unresolved (null) and skipped by allResolved.
 function resolveAll(
   data: OverpassResult,
   graph: Graph,
   nodes: RouteRequestNode[],
 ): ResolvedVertex[] {
-  return nodes.map((n) => resolveVertex(data, graph, n));
+  return nodes.map((n, i) => {
+    if (isFree(n)) return null;
+    // A network node only needs a graph vertex if it participates in at
+    // least one network (node-to-node) leg.
+    const prev = i > 0 ? nodes[i - 1] : null;
+    const next = i < nodes.length - 1 ? nodes[i + 1] : null;
+    const needed =
+      (prev !== null && !isOffgridLeg(prev, n)) ||
+      (next !== null && !isOffgridLeg(n, next));
+    if (!needed) return null;
+    return resolveVertex(data, graph, n);
+  });
 }
 
-function allResolved(resolved: ResolvedVertex[]): boolean {
-  return resolved.every((v) => v !== null && v.dist <= MAX_SNAP_METERS);
+function allResolved(
+  nodes: RouteRequestNode[],
+  resolved: ResolvedVertex[],
+): boolean {
+  return nodes.every((n, i) => {
+    if (isFree(n)) return true;
+    const prev = i > 0 ? nodes[i - 1] : null;
+    const next = i < nodes.length - 1 ? nodes[i + 1] : null;
+    const needed =
+      (prev !== null && !isOffgridLeg(prev, n)) ||
+      (next !== null && !isOffgridLeg(n, next));
+    if (!needed) return true;
+    const v = resolved[i];
+    return v !== null && v.dist <= MAX_SNAP_METERS;
+  });
 }
 
 function boundingBox(nodes: RouteRequestNode[], pad: number): Bbox {
@@ -260,9 +304,22 @@ export async function planRoute(
     );
   }
 
-  let data = await getNetworkForRoute(bbox);
-  let graph = buildGraph(data);
-  let resolved = resolveAll(data, graph, nodes);
+  // Only fetch/build the node-network graph when at least one leg actually
+  // follows the network. A purely offgrid route (all free points) doesn't
+  // need it at all.
+  const hasNetworkLeg = nodes.some(
+    (n, i) => i < nodes.length - 1 && !isOffgridLeg(n, nodes[i + 1]),
+  );
+
+  let data: OverpassResult = { nodes: new Map(), ways: [] };
+  let graph: Graph = { adj: new Map() };
+  let resolved: ResolvedVertex[] = nodes.map(() => null);
+
+  if (hasNetworkLeg) {
+    data = await getNetworkForRoute(bbox);
+    graph = buildGraph(data);
+    resolved = resolveAll(data, graph, nodes);
+  }
 
   // Every clickable knooppunt should be routable, but the preloaded dataset can
   // be incomplete or stale for a given area (e.g. an import gap, or a knooppunt
@@ -270,12 +327,12 @@ export async function planRoute(
   // the network, retry once with live Overpass data before giving up — this is
   // what turns the old "Could not locate node" 422 into a real route for nodes
   // that simply weren't covered by the local dataset.
-  if (!allResolved(resolved)) {
+  if (hasNetworkLeg && !allResolved(nodes, resolved)) {
     try {
       const liveData = await fetchOverpass(bbox);
       const liveGraph = buildGraph(liveData);
       const liveResolved = resolveAll(liveData, liveGraph, nodes);
-      if (allResolved(liveResolved)) {
+      if (allResolved(nodes, liveResolved)) {
         data = liveData;
         graph = liveGraph;
         resolved = liveResolved;
@@ -300,39 +357,63 @@ export async function planRoute(
     if (i === 0) nodeRefs.push(from.ref);
     nodeRefs.push(to.ref);
 
-    const startVertex = resolved[i];
-    const endVertex = resolved[i + 1];
-    if (
-      startVertex === null ||
-      endVertex === null ||
-      startVertex.dist > MAX_SNAP_METERS ||
-      endVertex.dist > MAX_SNAP_METERS
-    ) {
-      throw new NoPathError(
-        `Could not locate node ${from.ref} or ${to.ref} on the cycling network.`,
-      );
-    }
+    let legCoords: number[][];
+    let legDistance: number;
+    let legMode: "network" | "offgrid";
 
-    const result = dijkstra(graph, startVertex.id, endVertex.id);
-    if (!result) {
-      throw new NoPathError(
-        `No connecting path found between node ${from.ref} and ${to.ref}.`,
-      );
-    }
+    if (isOffgridLeg(from, to)) {
+      legMode = "offgrid";
+      try {
+        const offgrid = await routeOffgridLeg(from.lat, from.lon, to.lat, to.lon);
+        legCoords = offgrid.coordinates;
+        legDistance = offgrid.distanceMeters;
+      } catch (err) {
+        if (err instanceof OffgridNoPathError) {
+          throw new NoPathError(
+            `No bikeable path found between ${from.ref || "point"} and ${to.ref || "point"}.`,
+          );
+        }
+        if (err instanceof OffgridRoutingError) throw err;
+        throw err;
+      }
+    } else {
+      legMode = "network";
+      const startVertex = resolved[i];
+      const endVertex = resolved[i + 1];
+      if (
+        startVertex === null ||
+        endVertex === null ||
+        startVertex.dist > MAX_SNAP_METERS ||
+        endVertex.dist > MAX_SNAP_METERS
+      ) {
+        throw new NoPathError(
+          `Could not locate node ${from.ref} or ${to.ref} on the cycling network.`,
+        );
+      }
 
-    const legCoords: number[][] = [];
-    for (const vid of result.path) {
-      const v = data.nodes.get(vid);
-      if (v) legCoords.push([v.lon, v.lat]);
+      const result = dijkstra(graph, startVertex.id, endVertex.id);
+      if (!result) {
+        throw new NoPathError(
+          `No connecting path found between node ${from.ref} and ${to.ref}.`,
+        );
+      }
+
+      legCoords = [];
+      for (const vid of result.path) {
+        const v = data.nodes.get(vid);
+        if (v) legCoords.push([v.lon, v.lat]);
+      }
+      legDistance = result.distance;
     }
 
     legs.push({
       fromRef: from.ref,
       toRef: to.ref,
-      distanceMeters: Math.round(result.distance),
+      distanceMeters: Math.round(legDistance),
       coordinates: legCoords,
+      mode: legMode,
     });
-    totalDistance += result.distance;
+    totalDistance += legDistance;
 
     for (const coord of legCoords) {
       const last = coordinates[coordinates.length - 1];

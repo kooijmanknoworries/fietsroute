@@ -84,6 +84,9 @@ export default function Home() {
     flyToRegion,
     setFlyToRegion,
     handleNodeClick,
+    handleMapClick,
+    planMode,
+    setPlanMode,
     handleUndo,
     handleClear,
     savedRoutes,
@@ -532,6 +535,44 @@ export default function Home() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold tracking-tight">{t("route.yourRoute")}</h2>
+              <div
+                className="flex overflow-hidden rounded-md border border-border text-xs font-medium"
+                role="group"
+                aria-label={t("mode.label")}
+              >
+                <button
+                  type="button"
+                  onClick={() => setPlanMode("network")}
+                  aria-pressed={planMode === "network"}
+                  title={t("mode.networkTitle")}
+                  className={
+                    "px-2.5 py-1.5 transition-colors " +
+                    (planMode === "network"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent")
+                  }
+                  data-testid="mode-network"
+                >
+                  {t("mode.network")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPlanMode("offgrid")}
+                  aria-pressed={planMode === "offgrid"}
+                  title={t("mode.offgridTitle")}
+                  className={
+                    "px-2.5 py-1.5 transition-colors " +
+                    (planMode === "offgrid"
+                      ? "bg-amber-600 text-white"
+                      : "text-muted-foreground hover:bg-accent")
+                  }
+                  data-testid="mode-offgrid"
+                >
+                  {t("mode.offgrid")}
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-end -mt-2">
               {selectedNodes.length > 0 && (
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="icon" onClick={handleUndo} title={t("route.undo")} className="h-8 w-8">
@@ -544,23 +585,52 @@ export default function Home() {
               )}
             </div>
 
+            {planMode === "offgrid" && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">
+                {t("mode.offgridHint")}
+              </div>
+            )}
+
             {selectedNodes.length === 0 ? (
               <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
-                {t("route.emptyHint")}
+                {planMode === "offgrid" ? t("route.emptyHintOffgrid") : t("route.emptyHint")}
               </div>
             ) : (
               <div className="space-y-4">
                 <div className="flex flex-wrap gap-2 items-center">
-                  {selectedNodes.map((node, index) => (
+                  {selectedNodes.map((node, index) => {
+                    const isFree = node.kind === "free";
+                    const next = selectedNodes[index + 1];
+                    const connectorOffgrid =
+                      next && (isFree || next.kind === "free");
+                    return (
                     <React.Fragment key={`${node.id}-${index}`}>
-                      <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-primary/20">
-                        {node.ref}
-                      </div>
+                      {isFree ? (
+                        <div
+                          className="h-8 w-8 rounded-full bg-amber-600 text-white flex items-center justify-center shadow-sm ring-2 ring-amber-600/20"
+                          title={t("route.freePoint")}
+                        >
+                          <Navigation className="h-4 w-4" />
+                        </div>
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm shadow-sm ring-2 ring-primary/20">
+                          {node.ref}
+                        </div>
+                      )}
                       {index < selectedNodes.length - 1 && (
-                        <div className="h-1 w-4 bg-muted-foreground/30 rounded-full" />
+                        <div
+                          className={
+                            "h-1 w-4 rounded-full " +
+                            (connectorOffgrid
+                              ? "bg-amber-500 [background-image:repeating-linear-gradient(90deg,transparent,transparent_2px,white_2px,white_4px)]"
+                              : "bg-muted-foreground/30")
+                          }
+                          title={connectorOffgrid ? t("route.offgridLeg") : undefined}
+                        />
                       )}
                     </React.Fragment>
-                  ))}
+                    );
+                  })}
                   {isPlanningRoute && (
                     <>
                       <div className="h-1 w-4 bg-muted-foreground/30 rounded-full animate-pulse" />
@@ -782,10 +852,12 @@ export default function Home() {
           segments={networkData?.segments || []}
           selectedNodes={selectedNodes}
           routeCoordinates={routePlan?.coordinates || null}
+          routeLegs={routePlan?.legs || null}
           importedCoordinates={importedCoordinates}
           boundaryGeometry={boundaryGeometry}
           onBboxChange={handleViewportChange}
           onNodeClick={handleNodeClick}
+          onMapClick={handleMapClick}
           onRecenter={handleRecenter}
           flyToRegion={flyToRegion}
           initialBounds={initialBounds}

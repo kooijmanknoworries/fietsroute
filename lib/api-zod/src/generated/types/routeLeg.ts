@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RouteLegMode } from './routeLegMode';
 
 /**
  * One leg of the route between two consecutive nodes.
@@ -14,4 +15,7 @@ export interface RouteLeg {
   toRef: string;
   distanceMeters: number;
   coordinates: number[][];
+  /** How this leg was routed: "network" follows the numbered node network (default); "offgrid" was routed over general cycle-friendly ways between arbitrary points.
+   */
+  mode?: RouteLegMode;
 }

@@ -5,10 +5,14 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { RouteRequestNodeKind } from './routeRequestNodeKind';
 
 export interface RouteRequestNode {
   id: string;
   ref: string;
   lat: number;
   lon: number;
+  /** Waypoint kind: "node" is a numbered knooppunt on the network (default); "free" is an arbitrary map point routed offgrid over all cycle-friendly ways.
+   */
+  kind?: RouteRequestNodeKind;
 }

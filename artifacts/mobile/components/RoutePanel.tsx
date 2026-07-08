@@ -135,44 +135,59 @@ export default function RoutePanel() {
         contentContainerStyle={styles.nodeList}
         scrollEnabled={!!selectedNodes && selectedNodes.length > 3}
       >
-        {selectedNodes.map((node, index) => (
+        {selectedNodes.map((node, index) => {
+          const isFree = node.kind === "free";
+          const prev = index > 0 ? selectedNodes[index - 1] : null;
+          const connectorOffgrid = prev && (isFree || prev.kind === "free");
+          return (
           <View key={node.id} style={styles.nodeChipWrapper}>
             {index > 0 && (
-              <View style={[styles.arrowConnector, { backgroundColor: colors.border }]} />
+              <View
+                style={[
+                  styles.arrowConnector,
+                  { backgroundColor: connectorOffgrid ? "#d97706" : colors.border },
+                ]}
+              />
             )}
             <TouchableOpacity
               onPress={() => removeNode(node.id)}
               style={[
                 styles.nodeChip,
                 {
-                  backgroundColor:
-                    index === 0
-                      ? colors.primary
-                      : index === selectedNodes.length - 1
-                      ? colors.destructive
-                      : colors.secondary,
+                  backgroundColor: isFree
+                    ? "#d97706"
+                    : index === 0
+                    ? colors.primary
+                    : index === selectedNodes.length - 1
+                    ? colors.destructive
+                    : colors.secondary,
                   borderColor: colors.border,
                 },
               ]}
-              testID={`node-chip-${node.ref}`}
+              testID={isFree ? `free-chip-${index}` : `node-chip-${node.ref}`}
             >
-              <Text
-                style={[
-                  styles.nodeChipText,
-                  {
-                    color:
-                      index === 0 || index === selectedNodes.length - 1
-                        ? "#ffffff"
-                        : colors.foreground,
-                    fontFamily: "Inter_700Bold",
-                  },
-                ]}
-              >
-                {node.ref}
-              </Text>
+              {isFree ? (
+                <Ionicons name="navigate" size={16} color="#ffffff" />
+              ) : (
+                <Text
+                  style={[
+                    styles.nodeChipText,
+                    {
+                      color:
+                        index === 0 || index === selectedNodes.length - 1
+                          ? "#ffffff"
+                          : colors.foreground,
+                      fontFamily: "Inter_700Bold",
+                    },
+                  ]}
+                >
+                  {node.ref}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       {selectedNodes.length >= 2 && routePlan && (

@@ -653,6 +653,13 @@ components:
           type: number
         lon:
           type: number
+        kind:
+          type: string
+          enum: [node, free]
+          description: >
+            Waypoint kind: "node" is a numbered knooppunt on the network
+            (default); "free" is an arbitrary map point routed offgrid over
+            all cycle-friendly ways.
       required:
         - id
         - ref
@@ -684,6 +691,13 @@ components:
             type: array
             items:
               type: number
+        mode:
+          type: string
+          enum: [network, offgrid]
+          description: >
+            How this leg was routed: "network" follows the numbered node
+            network (default); "offgrid" was routed over general
+            cycle-friendly ways between arbitrary points.
       required:
         - fromRef
         - toRef
