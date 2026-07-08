@@ -10,6 +10,7 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- `./scripts/push-to-github.sh [--dry-run]` — push HEAD to GitHub `main` using the `GITHUB_PUSH_TOKEN` secret (fine-grained PAT, Contents: read/write); token is never stored in git config
 
 ## Stack
 
