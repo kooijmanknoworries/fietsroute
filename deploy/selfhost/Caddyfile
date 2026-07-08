@@ -6,3 +6,11 @@
         encode gzip
         reverse_proxy web:8080
 }
+
+# LAN access by internal IP over plain HTTP (public CAs cannot issue
+# certificates for private IPs). Keeps the web app reachable at
+# http://192.168.3.71 alongside the public HTTPS domain above.
+http://192.168.3.71 {
+        encode gzip
+        reverse_proxy web:8080
+}
