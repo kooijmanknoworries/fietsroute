@@ -13,6 +13,7 @@ import {
   useDeleteSavedRoute,
   useUpdateSavedRoute,
   getSavedRoute,
+  getSharedRoute,
   getNetwork,
   getListSavedRoutesQueryKey,
   getGetNetworkQueryKey,
@@ -561,6 +562,27 @@ export function useRoutePlanner() {
     }
   }, []);
 
+  // Load a shared route (public token) into the planner: same hydration as
+  // opening a saved route, but via the unauthenticated shared endpoint. Used
+  // when the planner is opened from a share link (/?shared=<token>).
+  const handleOpenSharedRoute = useCallback(async (token: string) => {
+    try {
+      const route = await getSharedRoute(token);
+      setSelectedNodes(route.nodes as NetworkNode[]);
+      setRoutePlan(route.plan);
+      setRouteError(null);
+      setImportedCoordinates(null);
+      const viewport = viewportForCoordinates(route.plan.coordinates);
+      if (viewport) {
+        setFlyToRegion(viewport);
+      }
+    } catch (err) {
+      setRouteError(
+        err instanceof Error ? err.message : tRef.current("error.openFailed"),
+      );
+    }
+  }, []);
+
   const handleDeleteSavedRoute = useCallback(
     (id: string) => {
       deleteRouteMutation.mutate(
@@ -620,6 +642,7 @@ export function useRoutePlanner() {
     handleSaveRoute,
     isSavingRoute: saveRouteMutation.isPending,
     handleOpenSavedRoute,
+    handleOpenSharedRoute,
     openingRouteId,
     handleDeleteSavedRoute,
     handleRenameSavedRoute,

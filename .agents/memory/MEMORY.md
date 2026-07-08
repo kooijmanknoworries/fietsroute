@@ -41,3 +41,4 @@
 - [Offgrid OSRM routing](offgrid-osrm-routing.md) — free-point legs routed via external OSRM bike router; NoRoute→422, `osrm:` cache prefix, tests must clear those rows; dashed amber in UIs.
 - [Azure deployment topology](azure-deployment.md) — /, /api, /mobile must share one public domain (nginx entrypoint path-routes); api dist is self-contained; mobile bundles bake the domain in at build.
 - [renderHook prop identity](renderhook-prop-identity.md) — per-render fixture objects trip identity-keyed effects in hooks under test; hoist fixtures so props stay referentially stable.
+- [Public shared route links](shared-route-links.md) — /api/shared/:token is public by design; new public routers must be allowlisted in BOTH sets in the auth-gate test.

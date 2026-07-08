@@ -27,6 +27,7 @@ import { useI18n } from "@/lib/i18n";
 import { SessionExpiredHandler } from "@/components/SessionExpiredHandler";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
+import SharedRoutePage from "@/pages/SharedRoute";
 import AdminPage from "@/pages/Admin";
 import { queryClient } from "@/lib/queryClient";
 
@@ -189,6 +190,10 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomeGate} />
+      {/* Shared route links are public by design: recipients may not have an
+          account, so this route is intentionally NOT behind the sign-in gate.
+          The backing API endpoint is public too. */}
+      <Route path="/shared/:token" component={SharedRoutePage} />
       <Route path="/admin" component={AdminPage} />
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />

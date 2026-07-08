@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  Share,
   Alert,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -23,6 +24,18 @@ import { useAccessStatus } from "@/hooks/useAccessStatus";
 import SaveRouteModal from "@/components/SaveRouteModal";
 import ElevationProfile from "@/components/ElevationProfile";
 import { exportRouteAsGpx } from "@/lib/gpxExport";
+import { shareRoute } from "@workspace/api-client-react";
+
+// Base for public share links. Shared pages live on the web app, which is
+// served from the same public domain as the API under path routing.
+function shareUrlBase(): string {
+  const domain = process.env.EXPO_PUBLIC_DOMAIN;
+  if (domain) return `https://${domain}`;
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return "";
+}
 
 function formatDistance(meters: number): string {
   if (meters >= 1000) {
@@ -44,6 +57,7 @@ export default function RoutePanel() {
 
   const [saveVisible, setSaveVisible] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
 
   const canSave = selectedNodes.length >= 2 && !!routePlan && !writeBlocked;
   const canExport = !!routePlan && routePlan.coordinates.length > 0;
@@ -64,6 +78,32 @@ export default function RoutePanel() {
       );
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Create a public share link and hand it to the native share sheet. The
+  // recipient can open the link without an account.
+  const handleShare = async () => {
+    if (!routePlan || selectedNodes.length < 2 || isSharing) return;
+    setIsSharing(true);
+    try {
+      const { token } = await shareRoute({
+        nodes: selectedNodes.map((n) => ({
+          id: n.id,
+          ref: n.ref,
+          lat: n.lat,
+          lon: n.lon,
+        })),
+        plan: routePlan,
+      });
+      const url = `${shareUrlBase()}/shared/${token}`;
+      await Share.share(
+        Platform.OS === "ios" ? { url, message: "Bekijk mijn fietsroute" } : { message: url },
+      );
+    } catch (err) {
+      Alert.alert("Delen mislukt", "Kon geen deellink maken. Probeer het opnieuw.");
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -142,6 +182,20 @@ export default function RoutePanel() {
             >
               {exporting ? (
                 <ActivityIndicator size="small" color={colors.foreground} />
+              ) : (
+                <Ionicons name="download-outline" size={18} color={colors.foreground} />
+              )}
+            </TouchableOpacity>
+          )}
+          {canSave && (
+            <TouchableOpacity
+              onPress={handleShare}
+              disabled={isSharing}
+              style={[styles.iconBtn, { backgroundColor: colors.muted }]}
+              testID="share-route"
+            >
+              {isSharing ? (
+                <ActivityIndicator size="small" color={colors.primary} />
               ) : (
                 <Ionicons name="share-outline" size={18} color={colors.foreground} />
               )}

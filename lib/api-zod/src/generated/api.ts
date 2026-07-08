@@ -291,6 +291,65 @@ export const DeleteSavedRouteParams = zod.object({
 
 
 /**
+ * Stores an immutable snapshot of the route (nodes + planned geometry) under an unguessable token. Anyone with the token can view the route without signing in. Requires authentication to create.
+
+ * @summary Create a public share link for a planned route
+ */
+export const ShareRouteBody = zod.object({
+  "name": zod.string().optional().describe('Optional display name for the shared route.'),
+  "nodes": zod.array(zod.object({
+  "id": zod.string(),
+  "ref": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number()
+})).describe('The ordered selected nodes of the route.'),
+  "plan": zod.object({
+  "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
+  "coordinates": zod.array(zod.array(zod.number())).describe('Full route geometry as ordered [lon, lat] pairs.'),
+  "distanceMeters": zod.number(),
+  "legs": zod.array(zod.object({
+  "fromRef": zod.string(),
+  "toRef": zod.string(),
+  "distanceMeters": zod.number(),
+  "coordinates": zod.array(zod.array(zod.number()))
+}).describe('One leg of the route between two consecutive nodes.'))
+})
+})
+
+
+/**
+ * Returns the shared route snapshot for the given token. This endpoint is public — no authentication is required, so shared links can be opened by anyone.
+
+ * @summary Get a publicly shared route by token
+ */
+export const GetSharedRouteParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetSharedRouteResponse = zod.object({
+  "name": zod.string().optional().describe('Optional display name given when the route was shared.'),
+  "nodes": zod.array(zod.object({
+  "id": zod.string(),
+  "ref": zod.string(),
+  "lat": zod.number(),
+  "lon": zod.number()
+})),
+  "plan": zod.object({
+  "nodeRefs": zod.array(zod.string()).describe('The ordered knooppunt numbers along the route.'),
+  "coordinates": zod.array(zod.array(zod.number())).describe('Full route geometry as ordered [lon, lat] pairs.'),
+  "distanceMeters": zod.number(),
+  "legs": zod.array(zod.object({
+  "fromRef": zod.string(),
+  "toRef": zod.string(),
+  "distanceMeters": zod.number(),
+  "coordinates": zod.array(zod.array(zod.number()))
+}).describe('One leg of the route between two consecutive nodes.'))
+}),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * Returns every network leg the signed-in rider has completed on past rides, so the map can show lock markers for what they have already ridden. Requires authentication.
 
  * @summary List the rider's permanently visited segments

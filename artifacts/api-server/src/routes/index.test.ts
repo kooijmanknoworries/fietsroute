@@ -17,6 +17,7 @@ const { default: router } = await import("./index");
 // are the SAME object references that routes/index.ts registers.
 const { requireAuth } = await import("../middlewares/requireAuth");
 const { default: healthRouter } = await import("./health");
+const { publicSharedRoutesRouter } = await import("./shared-routes");
 
 // Express layer shape we rely on. `handle` is the mounted router/middleware,
 // `route` is set for direct routes, `slash` is true only for root ("/") mounts.
@@ -33,7 +34,11 @@ function stackOf(r: IRouter): Layer[] {
 // Routers/middleware that are allowed to sit ABOVE the auth gate because they are
 // deliberately public. Compared by object identity, not by path — so the check
 // is immune to how (or under what prefix) a router is mounted.
-const PUBLIC_ROUTER_HANDLES = new Set<unknown>([healthRouter]);
+const PUBLIC_ROUTER_HANDLES = new Set<unknown>([
+  healthRouter,
+  // Shared-route links are viewable without an account by design.
+  publicSharedRoutesRouter,
+]);
 
 // ---------------------------------------------------------------------------
 // Structural guard: the authoritative, prefix-agnostic check.
@@ -82,7 +87,11 @@ function findUnprotectedLayers(
 // just that it is positioned correctly) for every real endpoint.
 // ---------------------------------------------------------------------------
 
-const PUBLIC_ALLOWLIST = new Set<string>(["GET /api/healthz"]);
+const PUBLIC_ALLOWLIST = new Set<string>([
+  "GET /api/healthz",
+  // Public by design: recipients of a share link have no account.
+  "GET /api/shared/1",
+]);
 
 type Endpoint = { method: string; path: string; prefixKnown: boolean };
 

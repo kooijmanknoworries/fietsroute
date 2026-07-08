@@ -42,6 +42,7 @@ vi.mock("@workspace/api-client-react", () => ({
   useDeleteSavedRoute: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateSavedRoute: () => ({ mutate: vi.fn(), isPending: false }),
   getSavedRoute: vi.fn(),
+  getSharedRoute: vi.fn(),
   getNetwork: vi.fn(() => Promise.resolve({ nodes: [] })),
   getListSavedRoutesQueryKey: () => ["saved-routes"],
   getGetNetworkQueryKey: (params?: { bbox: string }) => ["network", params?.bbox],
@@ -650,5 +651,77 @@ describe("useRoutePlanner draft persistence", () => {
       result.current.handleNodeClick(NODE_B);
     });
     expect(sessionStorage.length).toBe(0);
+  });
+});
+
+describe("useRoutePlanner shared route hydration", () => {
+  const SHARED = {
+    name: "Gedeelde route",
+    nodes: [
+      { id: "10", ref: "30", lat: 52.09, lon: 5.12 },
+      { id: "11", ref: "31", lat: 52.1, lon: 5.14 },
+    ],
+    plan: {
+      nodeRefs: ["30", "31"],
+      coordinates: [
+        [5.12, 52.09],
+        [5.14, 52.1],
+      ],
+      distanceMeters: 2400,
+      legs: [
+        { fromRef: "30", toRef: "31", distanceMeters: 2400, coordinates: [] },
+      ],
+    },
+  };
+
+  function renderPlanner() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>
+        <I18nProvider>{children}</I18nProvider>
+      </QueryClientProvider>
+    );
+    return renderHook(() => useRoutePlanner(), { wrapper });
+  }
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("loads a shared route's nodes and plan into planner state", async () => {
+    const api = await import("@workspace/api-client-react");
+    (api.getSharedRoute as ReturnType<typeof vi.fn>).mockResolvedValue(SHARED);
+
+    const { result } = renderPlanner();
+
+    await act(async () => {
+      await result.current.handleOpenSharedRoute("token123");
+    });
+
+    expect(api.getSharedRoute).toHaveBeenCalledWith("token123");
+    expect(result.current.selectedNodes.map((n) => n.ref)).toEqual(["30", "31"]);
+    expect(result.current.routePlan?.distanceMeters).toBe(2400);
+    expect(result.current.routeError).toBeNull();
+    // The map should fly to the shared route's area.
+    expect(result.current.flyToRegion).not.toBeNull();
+  });
+
+  it("surfaces an error when the shared route cannot be loaded", async () => {
+    const api = await import("@workspace/api-client-react");
+    (api.getSharedRoute as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("HTTP 404: Shared route not found"),
+    );
+
+    const { result } = renderPlanner();
+
+    await act(async () => {
+      await result.current.handleOpenSharedRoute("missing");
+    });
+
+    expect(result.current.selectedNodes).toEqual([]);
+    expect(result.current.routeError).toBe("HTTP 404: Shared route not found");
   });
 });

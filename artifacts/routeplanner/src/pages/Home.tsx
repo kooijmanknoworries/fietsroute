@@ -28,7 +28,9 @@ import {
   Trophy,
   Clock,
   Gauge,
-  Users
+  Users,
+  Printer,
+  Share2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,6 +51,7 @@ import { useAccessStatus } from "@/hooks/use-access-status";
 import {
   useGetNetworkStatus,
   getGetNetworkStatusQueryKey,
+  shareRoute,
 } from "@workspace/api-client-react";
 import type { MunicipalityResult } from "@workspace/api-client-react";
 import {
@@ -65,6 +68,7 @@ import { useRide } from "@/hooks/use-ride";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
 import ElevationProfile from "@/components/ElevationProfile";
+import RouteSheet from "@/components/RouteSheet";
 import { useI18n } from "@/lib/i18n";
 
 export default function Home() {
@@ -94,6 +98,7 @@ export default function Home() {
     handleSaveRoute,
     isSavingRoute,
     handleOpenSavedRoute,
+    handleOpenSharedRoute,
     openingRouteId,
     handleDeleteSavedRoute,
     handleRenameSavedRoute,
@@ -163,6 +168,39 @@ export default function Home() {
   const [renameValue, setRenameValue] = useState("");
 
   const initialBounds = initialFavorite?.boundingBox ?? null;
+
+  // Hydrate the planner from a share link. The token arrives either as a
+  // ?shared= query param or via a sessionStorage stash (set by the shared-route
+  // page before navigating, so it survives a forced sign-in redirect that
+  // would drop query params). Runs once on mount.
+  const sharedTokenHandled = useRef(false);
+  useEffect(() => {
+    if (sharedTokenHandled.current) return;
+    sharedTokenHandled.current = true;
+    let token: string | null = null;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      token = params.get("shared");
+      if (token) {
+        params.delete("shared");
+        const rest = params.toString();
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + (rest ? `?${rest}` : ""),
+        );
+      } else {
+        token = sessionStorage.getItem("fiets-shared-token");
+      }
+      sessionStorage.removeItem("fiets-shared-token");
+    } catch {
+      // Storage can be unavailable (private mode); the query param path above
+      // has already been tried.
+    }
+    if (token) {
+      handleOpenSharedRoute(token);
+    }
+  }, [handleOpenSharedRoute]);
 
   // Clear the municipality outline once the user shifts focus to a route
   // (planning nodes or an imported GPX track).
@@ -238,6 +276,49 @@ export default function Home() {
     }
   };
 
+  // Create a public share link for the current route and copy it to the
+  // clipboard. The link opens the shared-route page, which requires no login.
+  const [isSharing, setIsSharing] = useState(false);
+  const handleShareRoute = async () => {
+    if (!routePlan || selectedNodes.length < 2 || isSharing) return;
+    setIsSharing(true);
+    try {
+      const { token } = await shareRoute({
+        nodes: selectedNodes.map((n) => ({
+          id: n.id,
+          ref: n.ref,
+          lat: n.lat,
+          lon: n.lon,
+        })),
+        plan: routePlan,
+      });
+      const url = `${window.location.origin}${basePath}/shared/${token}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast({
+          title: t("toast.shareCopied.title"),
+          description: t("toast.shareCopied.desc"),
+        });
+      } catch {
+        // Clipboard access can be blocked (permissions); show the link so the
+        // rider can still copy it manually.
+        toast({ title: t("toast.shareCopied.title"), description: url });
+      }
+    } catch {
+      toast({
+        title: t("toast.shareFailed.title"),
+        description: t("toast.shareFailed.desc"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   const handleExportGPX = () => {
     if (routePlan?.coordinates && routePlan.coordinates.length > 0) {
       exportGPX(
@@ -290,7 +371,20 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden flex-col md:flex-row">
+    <>
+    {/* Printable route sheet: hidden on screen, becomes the whole page when
+        printing (the app UI below is .no-print). */}
+    {routePlan && selectedNodes.length >= 2 && (
+      <div className="print-only">
+        <RouteSheet
+          nodes={selectedNodes}
+          legs={routePlan.legs}
+          distanceMeters={routePlan.distanceMeters}
+          coordinates={routePlan.coordinates}
+        />
+      </div>
+    )}
+    <div className="no-print flex h-screen w-full bg-background overflow-hidden flex-col md:flex-row">
       {/* Sidebar Panel */}
       <div className="w-full md:w-96 flex-shrink-0 border-b md:border-r border-border bg-card flex flex-col h-1/2 md:h-full z-10 shadow-lg">
         <div className="p-4 bg-primary text-primary-foreground">
@@ -670,6 +764,30 @@ export default function Home() {
                     >
                       <Save className="mr-2 h-4 w-4" /> {t("route.saveRoute")}
                     </Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={writeBlocked || isSharing}
+                        onClick={handleShareRoute}
+                        data-testid="share-route"
+                      >
+                        {isSharing ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Share2 className="mr-2 h-4 w-4" />
+                        )}
+                        {t("share.button")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handlePrint}
+                        data-testid="print-route"
+                      >
+                        <Printer className="mr-2 h-4 w-4" /> {t("print.button")}
+                      </Button>
+                    </div>
 
                     {/* Live ride tracking */}
                     <Separator className="my-1" />
@@ -1032,5 +1150,6 @@ export default function Home() {
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

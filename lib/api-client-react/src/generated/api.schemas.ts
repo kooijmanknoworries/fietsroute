@@ -196,6 +196,27 @@ export interface SavedRoute {
   createdAt: string;
 }
 
+export interface ShareRouteRequest {
+  /** Optional display name for the shared route. */
+  name?: string;
+  /** The ordered selected nodes of the route. */
+  nodes: RouteRequestNode[];
+  plan: RoutePlan;
+}
+
+export interface ShareRouteResult {
+  /** Unguessable token identifying the shared route. */
+  token: string;
+}
+
+export interface SharedRoute {
+  /** Optional display name given when the route was shared. */
+  name?: string;
+  nodes: RouteRequestNode[];
+  plan: RoutePlan;
+  createdAt: string;
+}
+
 export interface SavedRouteSummary {
   id: string;
   name: string;

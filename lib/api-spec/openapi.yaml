@@ -361,6 +361,62 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /shared-routes:
+    post:
+      operationId: shareRoute
+      tags: [routes]
+      summary: Create a public share link for a planned route
+      description: >
+        Stores an immutable snapshot of the route (nodes + planned geometry)
+        under an unguessable token. Anyone with the token can view the route
+        without signing in. Requires authentication to create.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareRouteRequest"
+      responses:
+        "201":
+          description: The share token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareRouteResult"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /shared/{token}:
+    get:
+      operationId: getSharedRoute
+      tags: [routes]
+      summary: Get a publicly shared route by token
+      description: >
+        Returns the shared route snapshot for the given token. This endpoint
+        is public — no authentication is required, so shared links can be
+        opened by anyone.
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The shared route
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SharedRoute"
+        "404":
+          description: Shared route not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /visited-segments:
     get:
       operationId: listVisitedSegments
@@ -843,6 +899,49 @@ components:
       required:
         - id
         - name
+        - nodes
+        - plan
+        - createdAt
+    ShareRouteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Optional display name for the shared route.
+        nodes:
+          type: array
+          description: The ordered selected nodes of the route.
+          items:
+            $ref: "#/components/schemas/RouteRequestNode"
+        plan:
+          $ref: "#/components/schemas/RoutePlan"
+      required:
+        - nodes
+        - plan
+    ShareRouteResult:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Unguessable token identifying the shared route.
+      required:
+        - token
+    SharedRoute:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Optional display name given when the route was shared.
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteRequestNode"
+        plan:
+          $ref: "#/components/schemas/RoutePlan"
+        createdAt:
+          type: string
+          format: date-time
+      required:
         - nodes
         - plan
         - createdAt

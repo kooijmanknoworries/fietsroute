@@ -41,6 +41,9 @@ import type {
   SavedRoute,
   SavedRouteSummary,
   SetUserAccessRequest,
+  ShareRouteRequest,
+  ShareRouteResult,
+  SharedRoute,
   UpdateSavedRouteRequest,
   UserAccess,
   VisitedSegment
@@ -1053,6 +1056,158 @@ export const useDeleteSavedRoute = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getDeleteSavedRouteMutationOptions(options));
     }
+
+export const getShareRouteUrl = () => {
+
+
+
+
+  return `/api/shared-routes`
+}
+
+/**
+ * Stores an immutable snapshot of the route (nodes + planned geometry) under an unguessable token. Anyone with the token can view the route without signing in. Requires authentication to create.
+
+ * @summary Create a public share link for a planned route
+ */
+export const shareRoute = async (shareRouteRequest: ShareRouteRequest, options?: RequestInit): Promise<ShareRouteResult> => {
+
+  return customFetch<ShareRouteResult>(getShareRouteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      shareRouteRequest,)
+  }
+);}
+
+
+
+
+export const getShareRouteMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof shareRoute>>, TError,{data: BodyType<ShareRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof shareRoute>>, TError,{data: BodyType<ShareRouteRequest>}, TContext> => {
+
+const mutationKey = ['shareRoute'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof shareRoute>>, {data: BodyType<ShareRouteRequest>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  shareRoute(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ShareRouteMutationResult = NonNullable<Awaited<ReturnType<typeof shareRoute>>>
+    export type ShareRouteMutationBody = BodyType<ShareRouteRequest>
+    export type ShareRouteMutationError = ErrorType<ApiError>
+
+    /**
+ * @summary Create a public share link for a planned route
+ */
+export const useShareRoute = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof shareRoute>>, TError,{data: BodyType<ShareRouteRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof shareRoute>>,
+        TError,
+        {data: BodyType<ShareRouteRequest>},
+        TContext
+      > => {
+      return useMutation(getShareRouteMutationOptions(options));
+    }
+
+export const getGetSharedRouteUrl = (token: string,) => {
+
+
+
+
+  return `/api/shared/${token}`
+}
+
+/**
+ * Returns the shared route snapshot for the given token. This endpoint is public — no authentication is required, so shared links can be opened by anyone.
+
+ * @summary Get a publicly shared route by token
+ */
+export const getSharedRoute = async (token: string, options?: RequestInit): Promise<SharedRoute> => {
+
+  return customFetch<SharedRoute>(getGetSharedRouteUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSharedRouteQueryKey = (token: string,) => {
+    return [
+    `/api/shared/${token}`
+    ] as const;
+    }
+
+
+export const getGetSharedRouteQueryOptions = <TData = Awaited<ReturnType<typeof getSharedRoute>>, TError = ErrorType<ApiError>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSharedRoute>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSharedRouteQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSharedRoute>>> = ({ signal }) => getSharedRoute(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(token), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSharedRoute>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSharedRouteQueryResult = NonNullable<Awaited<ReturnType<typeof getSharedRoute>>>
+export type GetSharedRouteQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get a publicly shared route by token
+ */
+
+export function useGetSharedRoute<TData = Awaited<ReturnType<typeof getSharedRoute>>, TError = ErrorType<ApiError>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSharedRoute>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSharedRouteQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getListVisitedSegmentsUrl = () => {
 

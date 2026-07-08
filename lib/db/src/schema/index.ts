@@ -22,5 +22,6 @@ export * from "./elevationCache";
 export * from "./overpassCache";
 export * from "./networkDataset";
 export * from "./saved-routes";
+export * from "./shared-routes";
 export * from "./visited-segments";
 export * from "./user-access";

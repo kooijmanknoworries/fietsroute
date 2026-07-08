@@ -180,3 +180,20 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Print support: the app UI is hidden while printing and the route sheet
+   (rendered in a .print-only container) takes over the page. */
+.print-only {
+  display: none;
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+  }
+  body {
+    background: #ffffff;
+  }
+}
