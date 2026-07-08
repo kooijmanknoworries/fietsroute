@@ -1,8 +1,8 @@
 # SITE_ADDRESS comes from docker-compose.yml:
-#   DOMAIN empty  -> ":80"                -> plain HTTP (LAN / by IP)
-#   DOMAIN set    -> "fiets.example.com"  -> automatic HTTPS via Let's Encrypt
-#                                            (port 80 auto-redirects to 443)
+#   DOMAIN empty  -> ":80"                     -> plain HTTP (LAN / by IP)
+#   DOMAIN set    -> "thuis.nicokooijman.nl"   -> automatic HTTPS via
+#                    Let's Encrypt (port 80 auto-redirects to 443)
 {$SITE_ADDRESS} {
-	encode gzip
-	reverse_proxy web:8080
+        encode gzip
+        reverse_proxy web:8080
 }
