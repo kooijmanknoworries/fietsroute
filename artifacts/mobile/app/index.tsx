@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -76,6 +76,8 @@ function MapScreenInner() {
   const mapRef = useRef<MapView>(null);
 
   const [mapRegion, setMapRegion] = useState<Region>(INITIAL_REGION);
+  // Latest region, readable from inside effects without re-running them.
+  const mapRegionRef = useRef<Region>(INITIAL_REGION);
   const [showNodes, setShowNodes] = useState(false);
 
   const bbox = showNodes ? regionToBbox(mapRegion) : "";
@@ -89,6 +91,7 @@ function MapScreenInner() {
   });
 
   const handleRegionChangeComplete = useCallback((r: Region) => {
+    mapRegionRef.current = r;
     setMapRegion(r);
     const zoom = zoomLevelFromDelta(r.latitudeDelta);
     setShowNodes(zoom >= 11);
@@ -143,7 +146,7 @@ function MapScreenInner() {
     const firstFix = !rideZoomedRef.current;
     rideZoomedRef.current = true;
     const delta = firstFix ? 0.004 : undefined;
-    const current = mapRegion;
+    const current = mapRegionRef.current;
     mapRef.current?.animateToRegion(
       {
         latitude: ridePosition[1],

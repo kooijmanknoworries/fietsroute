@@ -68,14 +68,31 @@ function lastFixHandler() {
   const handler = calls[calls.length - 1]?.[1];
   if (!handler) throw new Error("watchPositionAsync was not called");
   return handler as (pos: {
-    coords: { latitude: number; longitude: number };
+    coords: { latitude: number; longitude: number; accuracy?: number };
   }) => void;
+}
+
+// The hook's plausible-speed gate compares along-route progress against the
+// wall-clock time between fixes, so tests advance a mocked Date.now between
+// fixes instead of really waiting.
+let clockOffsetMs = 0;
+const realNow = Date.now;
+function advanceClock(seconds: number) {
+  clockOffsetMs += seconds * 1000;
+}
+
+// Drive the whole (single-leg, ~1.3 km) route with plausible fixes: baseline
+// at the start node, then the end node a couple of minutes later.
+async function driveToEnd(result: Result) {
+  await pushFix(result, 52.0, 5.0);
+  advanceClock(240);
+  await pushFix(result, 52.01, 5.01);
 }
 
 async function pushFix(result: Result, lat: number, lon: number) {
   const handler = lastFixHandler();
   await act(async () => {
-    handler({ coords: { latitude: lat, longitude: lon } });
+    handler({ coords: { latitude: lat, longitude: lon, accuracy: 5 } });
     await Promise.resolve();
   });
   return result;
@@ -89,6 +106,8 @@ async function stopRide(result: Result) {
 }
 
 beforeEach(() => {
+  clockOffsetMs = 0;
+  vi.spyOn(Date, "now").mockImplementation(() => realNow() + clockOffsetMs);
   apiState.history = [];
   apiState.mutate.mockReset();
   vi.mocked(Location.requestForegroundPermissionsAsync).mockResolvedValue({
@@ -134,8 +153,8 @@ describe("useRide", () => {
     expect(result.current.gpsError).toBeNull();
     expect(Location.watchPositionAsync).toHaveBeenCalled();
 
-    // A fix at the end node completes the single leg.
-    await pushFix(result, 52.01, 5.01);
+    // Riding from the start node to the end node completes the single leg.
+    await driveToEnd(result);
     expect(result.current.progressMeters).toBeGreaterThan(0);
 
     await stopRide(result);
@@ -155,7 +174,7 @@ describe("useRide", () => {
 
     const { result } = mount(true);
     await startRide(result);
-    await pushFix(result, 52.01, 5.01);
+    await driveToEnd(result);
     await stopRide(result);
 
     const summary = result.current.rideSummary;
@@ -166,7 +185,7 @@ describe("useRide", () => {
   it("marks the summary as signed-out and skips persistence when not signed in", async () => {
     const { result } = mount(false);
     await startRide(result);
-    await pushFix(result, 52.01, 5.01);
+    await driveToEnd(result);
     await stopRide(result);
 
     expect(result.current.rideSummary!.isSignedIn).toBe(false);
