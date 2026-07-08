@@ -180,6 +180,18 @@ const en = {
   "map.webglError":
     "The interactive map could not start because this browser or environment does not support WebGL. Try opening the app in a standard desktop browser with hardware acceleration enabled.",
 
+  "poi.button": "POI",
+  "poi.buttonTitle": "Show points of interest",
+  "poi.cafe": "Cafés & restaurants",
+  "poi.bike_shop": "Bike shops",
+  "poi.sights": "Sights",
+  "poi.ferry": "Ferries",
+  "poi.toilets": "Toilets",
+  "poi.alongRoute": "Only along my route",
+  "poi.alongRouteHint": "Plan a route first",
+  "poi.unnamed": "Unnamed",
+  "poi.zoomIn": "Zoom in to see points of interest",
+
   "notFound.title": "404 Page Not Found",
   "notFound.desc": "Did you forget to add the page to the router?",
 
@@ -372,6 +384,18 @@ const nl: Record<TranslationKey, string> = {
   "map.style.osm": "OpenStreetMap",
   "map.webglError":
     "De interactieve kaart kon niet starten omdat deze browser of omgeving geen WebGL ondersteunt. Open de app in een normale desktopbrowser met hardwareversnelling ingeschakeld.",
+
+  "poi.button": "POI",
+  "poi.buttonTitle": "Toon interessante punten",
+  "poi.cafe": "Cafés & restaurants",
+  "poi.bike_shop": "Fietsenmakers",
+  "poi.sights": "Bezienswaardigheden",
+  "poi.ferry": "Veerponten",
+  "poi.toilets": "Toiletten",
+  "poi.alongRoute": "Alleen langs mijn route",
+  "poi.alongRouteHint": "Plan eerst een route",
+  "poi.unnamed": "Naamloos",
+  "poi.zoomIn": "Zoom in om interessante punten te zien",
 
   "notFound.title": "404 Pagina niet gevonden",
   "notFound.desc": "Ben je vergeten de pagina aan de router toe te voegen?",

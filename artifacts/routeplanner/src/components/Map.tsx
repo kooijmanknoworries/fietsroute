@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import maplibregl from "maplibre-gl";
-import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe } from "lucide-react";
+import { Map as MapIcon, Satellite, LocateFixed, Sun, Moon, Palette, Globe, MapPin, Route } from "lucide-react";
 import {
   NetworkNode,
   NetworkSegment,
   GeoJsonGeometry,
+  Poi,
 } from "@workspace/api-client-react";
+import { POI_CATEGORIES, POI_COLORS, type PoiCategory } from "@/lib/poi";
 import {
   getBaseLayer,
   setBaseLayer,
@@ -56,6 +58,16 @@ interface MapProps {
   onFollowPause?: () => void;
   /** Called when the rider taps the "recenter on me" control. */
   onFollowResume?: () => void;
+  /** Points of interest to render (already filtered by category/corridor). */
+  pois?: Poi[];
+  /** Which POI categories are toggled on in the POI menu. */
+  poiCategories?: PoiCategory[];
+  onTogglePoiCategory?: (category: PoiCategory) => void;
+  /** Whether the "only along my route" corridor filter is on. */
+  poiAlongRoute?: boolean;
+  onTogglePoiAlongRoute?: () => void;
+  /** False while no route is planned, which disables the corridor toggle. */
+  poiAlongRouteAvailable?: boolean;
 }
 
 // Free, keyless raster basemaps. The CARTO styles' "@2x" variant serves high-
@@ -240,6 +252,12 @@ export default function Map({
   followRide = true,
   onFollowPause,
   onFollowResume,
+  pois,
+  poiCategories = [],
+  onTogglePoiCategory,
+  poiAlongRoute = false,
+  onTogglePoiAlongRoute,
+  poiAlongRouteAvailable = false,
 }: MapProps) {
   const { t } = useI18n();
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -268,6 +286,12 @@ export default function Map({
   streetStyleRef.current = streetStyle;
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const styleMenuRef = useRef<HTMLDivElement>(null);
+  const [poiMenuOpen, setPoiMenuOpen] = useState(false);
+  const poiMenuRef = useRef<HTMLDivElement>(null);
+  const poiPopupRef = useRef<maplibregl.Popup | null>(null);
+  // Latest translator, read from inside the once-registered popup handler.
+  const tRef = useRef(t);
+  tRef.current = t;
   nodesRef.current = nodes;
   onNodeClickRef.current = onNodeClick;
   onBboxChangeRef.current = onBboxChange;
@@ -622,6 +646,77 @@ export default function Map({
         }
       });
 
+      // Points of interest (cafés, bike shops, sights, ...), colour-coded per
+      // category and rendered under the knooppunt circles so route planning
+      // clicks keep priority.
+      m.addSource("pois", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      m.addLayer(
+        {
+          id: "pois-layer",
+          type: "circle",
+          source: "pois",
+          paint: {
+            "circle-radius": 6,
+            "circle-color": [
+              "match",
+              ["get", "category"],
+              ...POI_CATEGORIES.flatMap((c) => [c, POI_COLORS[c]]),
+              "#64748b"
+            ] as unknown as maplibregl.ExpressionSpecification,
+            "circle-stroke-width": 2,
+            "circle-stroke-color": "#ffffff"
+          }
+        },
+        "nodes-layer-circle"
+      );
+
+      m.on("mouseenter", "pois-layer", () => {
+        m.getCanvas().style.cursor = "pointer";
+      });
+      m.on("mouseleave", "pois-layer", () => {
+        m.getCanvas().style.cursor = "";
+      });
+      m.on("click", "pois-layer", (e) => {
+        const feature = e.features?.[0];
+        if (!feature) return;
+        // The headless test map has no Popup implementation; skip gracefully.
+        if (typeof maplibregl.Popup !== "function") return;
+        const props = feature.properties as {
+          name?: string;
+          category?: string;
+        };
+        const tt = tRef.current;
+        const name = props.name || tt("poi.unnamed");
+        const category = props.category
+          ? tt(`poi.${props.category}` as Parameters<typeof tt>[0])
+          : "";
+        const coords = (feature.geometry as GeoJSON.Point).coordinates as [
+          number,
+          number,
+        ];
+        poiPopupRef.current?.remove();
+        const el = document.createElement("div");
+        el.className = "text-sm";
+        const nameEl = document.createElement("div");
+        nameEl.className = "font-medium";
+        nameEl.textContent = name;
+        const catEl = document.createElement("div");
+        catEl.className = "text-xs text-muted-foreground";
+        catEl.textContent = category;
+        el.append(nameEl, catEl);
+        poiPopupRef.current = new maplibregl.Popup({
+          closeButton: true,
+          offset: 10,
+          maxWidth: "240px",
+        })
+          .setLngLat(coords)
+          .setDOMContent(el)
+          .addTo(m);
+      });
+
       m.on("mouseenter", "nodes-layer-circle", () => {
         m.getCanvas().style.cursor = "pointer";
       });
@@ -957,6 +1052,57 @@ export default function Map({
 
   }, [selectedNodes, routeCoordinates, routeLegs, importedCoordinates, nodes]);
 
+  // Push the POI markers into their source whenever the (already filtered)
+  // POI list changes.
+  useEffect(() => {
+    if (!map.current) return;
+    const m = map.current;
+    const apply = () => {
+      const poisSource = m.getSource("pois") as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (!poisSource) return;
+      poisSource.setData({
+        type: "FeatureCollection",
+        features: (pois ?? []).map((p) => ({
+          type: "Feature",
+          properties: { id: p.id, name: p.name ?? "", category: p.category },
+          geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+        })),
+      });
+    };
+    if (m.isStyleLoaded()) {
+      apply();
+      return;
+    }
+    m.once("load", apply);
+    return () => {
+      m.off("load", apply);
+    };
+  }, [pois]);
+
+  // Close the POI menu on outside clicks, like the style menu.
+  useEffect(() => {
+    if (!poiMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (poiMenuRef.current && !poiMenuRef.current.contains(e.target as Node)) {
+        setPoiMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [poiMenuOpen]);
+
+  // Remove any open POI popup when the map is torn down.
+  useEffect(() => {
+    return () => {
+      poiPopupRef.current?.remove();
+      poiPopupRef.current = null;
+    };
+  }, []);
+
   // Push the ride's travelled polyline and lock markers into their sources.
   useEffect(() => {
     if (!map.current) return;
@@ -1100,6 +1246,93 @@ export default function Map({
       )}
       {!mapError && (
         <div className="absolute right-3 top-3 z-10 flex flex-wrap items-start justify-end gap-2 max-w-[calc(100%-6rem)]">
+          {onTogglePoiCategory && (
+            <div className="relative" ref={poiMenuRef}>
+              <button
+                type="button"
+                onClick={() => setPoiMenuOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={poiMenuOpen}
+                title={t("poi.buttonTitle")}
+                className={
+                  "flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium shadow-md backdrop-blur transition-colors sm:px-3 " +
+                  (poiCategories.length > 0
+                    ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "border-border bg-card/95 text-muted-foreground hover:bg-accent")
+                }
+              >
+                <MapPin className="h-3.5 w-3.5" />{" "}
+                <span className="hidden sm:inline">{t("poi.button")}</span>
+              </button>
+              {poiMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-1 flex min-w-[13rem] flex-col overflow-hidden rounded-md border border-border bg-card/95 shadow-md backdrop-blur"
+                >
+                  {POI_CATEGORIES.map((category) => {
+                    const active = poiCategories.includes(category);
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={active}
+                        onClick={() => onTogglePoiCategory(category)}
+                        className={
+                          "flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium transition-colors " +
+                          (active
+                            ? "bg-accent text-foreground"
+                            : "text-muted-foreground hover:bg-accent")
+                        }
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={
+                            "inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-white shadow " +
+                            (active ? "" : "opacity-40")
+                          }
+                          style={{ backgroundColor: POI_COLORS[category] }}
+                        />
+                        <span className="flex-1">{t(`poi.${category}`)}</span>
+                        {active && <span aria-hidden="true">✓</span>}
+                      </button>
+                    );
+                  })}
+                  {onTogglePoiAlongRoute && (
+                    <>
+                      <div className="h-px bg-border" />
+                      <button
+                        type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={poiAlongRoute}
+                        disabled={!poiAlongRouteAvailable}
+                        onClick={onTogglePoiAlongRoute}
+                        title={
+                          poiAlongRouteAvailable
+                            ? undefined
+                            : t("poi.alongRouteHint")
+                        }
+                        className={
+                          "flex items-center gap-2 px-3 py-1.5 text-left text-xs font-medium transition-colors " +
+                          (!poiAlongRouteAvailable
+                            ? "cursor-not-allowed text-muted-foreground/50"
+                            : poiAlongRoute
+                              ? "bg-accent text-foreground"
+                              : "text-muted-foreground hover:bg-accent")
+                        }
+                      >
+                        <Route className="h-3.5 w-3.5 shrink-0" />
+                        <span className="flex-1">{t("poi.alongRoute")}</span>
+                        {poiAlongRoute && poiAlongRouteAvailable && (
+                          <span aria-hidden="true">✓</span>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           {baseLayer === "map" && (
             <div className="relative" ref={styleMenuRef}>
               <button

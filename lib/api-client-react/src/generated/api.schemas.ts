@@ -41,6 +41,39 @@ export interface NetworkData {
   truncated: boolean;
 }
 
+export type PoiCategory = typeof PoiCategory[keyof typeof PoiCategory];
+
+
+export const PoiCategory = {
+  cafe: 'cafe',
+  bike_shop: 'bike_shop',
+  sights: 'sights',
+  ferry: 'ferry',
+  toilets: 'toilets',
+} as const;
+
+/**
+ * A point of interest near the cycling network.
+ */
+export interface Poi {
+  /** Stable OSM element id (prefixed with its element type). */
+  id: string;
+  /**
+     * The POI's name, or null if unnamed in OSM.
+     * @nullable
+     */
+  name: string | null;
+  category: PoiCategory;
+  lat: number;
+  lon: number;
+}
+
+export interface PoiData {
+  pois: Poi[];
+  /** True if the area was too large and results were limited. */
+  truncated: boolean;
+}
+
 /**
  * Freshness and coverage of the locally preloaded cycling node network dataset.
 
@@ -350,6 +383,18 @@ export type GetNetworkParams = {
  * Bounding box as minLon,minLat,maxLon,maxLat (WGS84).
  */
 bbox: string;
+};
+
+export type GetPoisParams = {
+/**
+ * Bounding box as minLon,minLat,maxLon,maxLat (WGS84).
+ */
+bbox: string;
+/**
+ * Comma-separated POI categories to include. Allowed values: cafe, bike_shop, sights, ferry, toilets.
+
+ */
+categories: string;
 };
 
 export type GeocodeMunicipalityParams = {

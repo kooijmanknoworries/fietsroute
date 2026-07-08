@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/requireAuth";
 import healthRouter from "./health";
 import networkRouter from "./network";
+import poisRouter from "./pois";
 import routeRouter from "./route";
 import regionsRouter from "./regions";
 import geocodeRouter from "./geocode";
@@ -26,6 +27,7 @@ router.use(publicSharedRoutesRouter);
 router.use(requireAuth);
 
 router.use(networkRouter);
+router.use(poisRouter);
 router.use(routeRouter);
 router.use(regionsRouter);
 router.use(geocodeRouter);

@@ -13,7 +13,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, Redirect, type Href } from "expo-router";
 import { useAuth } from "@clerk/expo";
 import { useQuery } from "@tanstack/react-query";
-import { getNetwork, MunicipalityResult } from "@workspace/api-client-react";
+import { getNetwork, getPois, MunicipalityResult } from "@workspace/api-client-react";
+import {
+  POI_CATEGORIES,
+  POI_COLORS,
+  POI_ICONS,
+  POI_LABELS,
+  filterPoisAlongRoute,
+  type PoiCategory,
+} from "@/lib/poi";
 import { useColors } from "@/hooks/useColors";
 import { useRoutePlanner, NetworkNode } from "@/context/RoutePlannerContext";
 import { useRideContext } from "@/context/RideContext";
@@ -90,6 +98,36 @@ function MapScreenInner() {
     staleTime: 5 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
+
+  // Points of interest: user-toggled categories, fetched for the visible
+  // viewport (same zoom gate as the knooppunten so we never query huge areas).
+  const [poiCategories, setPoiCategories] = useState<PoiCategory[]>([]);
+  const [poiAlongRoute, setPoiAlongRoute] = useState(false);
+  const [poiMenuOpen, setPoiMenuOpen] = useState(false);
+  const poiCategoriesParam = [...poiCategories].sort().join(",");
+  const poisEnabled = poiCategories.length > 0 && !!bbox;
+  const { data: poiData } = useQuery({
+    queryKey: ["pois", bbox, poiCategoriesParam],
+    queryFn: () => getPois({ bbox, categories: poiCategoriesParam }),
+    enabled: poisEnabled,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
+  });
+
+  const togglePoiCategory = useCallback((category: PoiCategory) => {
+    setPoiCategories((prev) =>
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
+    );
+  }, []);
+
+  const visiblePois = React.useMemo(() => {
+    const all = poisEnabled ? (poiData?.pois ?? []) : [];
+    const coords = routePlan?.coordinates;
+    if (!poiAlongRoute || !coords || coords.length === 0) return all;
+    return filterPoisAlongRoute(all, coords);
+  }, [poisEnabled, poiData, poiAlongRoute, routePlan]);
 
   const handleRegionChangeComplete = useCallback((r: Region) => {
     mapRegionRef.current = r;
@@ -293,6 +331,34 @@ function MapScreenInner() {
           </Marker>
         ))}
 
+        {visiblePois.map((poi) => (
+          <Marker
+            key={`poi-${poi.id}`}
+            coordinate={{ latitude: poi.lat, longitude: poi.lon }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            title={poi.name ?? POI_LABELS[poi.category as PoiCategory] ?? poi.category}
+            description={POI_LABELS[poi.category as PoiCategory] ?? poi.category}
+            zIndex={5}
+            testID={`poi-marker-${poi.id}`}
+          >
+            <View
+              style={[
+                styles.poiMarker,
+                {
+                  backgroundColor:
+                    POI_COLORS[poi.category as PoiCategory] ?? "#64748b",
+                },
+              ]}
+            >
+              <Ionicons
+                name={POI_ICONS[poi.category as PoiCategory] ?? "location"}
+                size={13}
+                color="#ffffff"
+              />
+            </View>
+          </Marker>
+        ))}
+
         {ridePosition && (
           <Marker
             coordinate={{ latitude: ridePosition[1], longitude: ridePosition[0] }}
@@ -410,8 +476,128 @@ function MapScreenInner() {
         </TouchableOpacity>
       )}
 
+      {!isRiding && (
+        <>
+          <TouchableOpacity
+            onPress={() => setPoiMenuOpen((open) => !open)}
+            style={[
+              styles.savedBtn,
+              {
+                backgroundColor: poiCategories.length > 0 ? colors.primary : colors.card,
+                borderColor: poiCategories.length > 0 ? colors.primary : colors.border,
+                top: topPad + 64,
+                right: 16,
+              },
+            ]}
+            testID="poi-menu-button"
+          >
+            <Ionicons
+              name="pin"
+              size={20}
+              color={poiCategories.length > 0 ? "#ffffff" : colors.primary}
+            />
+          </TouchableOpacity>
+
+          {poiMenuOpen && (
+            <View
+              style={[
+                styles.poiMenu,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  top: topPad + 116,
+                  right: 16,
+                },
+              ]}
+              testID="poi-menu"
+            >
+              {POI_CATEGORIES.map((category) => {
+                const active = poiCategories.includes(category);
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    onPress={() => togglePoiCategory(category)}
+                    style={styles.poiMenuItem}
+                    testID={`poi-toggle-${category}`}
+                  >
+                    <View
+                      style={[
+                        styles.poiMenuDot,
+                        {
+                          backgroundColor: POI_COLORS[category],
+                          opacity: active ? 1 : 0.35,
+                        },
+                      ]}
+                    >
+                      <Ionicons name={POI_ICONS[category]} size={11} color="#ffffff" />
+                    </View>
+                    <Text
+                      style={[
+                        styles.poiMenuLabel,
+                        {
+                          color: active ? colors.foreground : colors.mutedForeground,
+                          fontFamily: active ? "Inter_500Medium" : "Inter_400Regular",
+                        },
+                      ]}
+                    >
+                      {POI_LABELS[category]}
+                    </Text>
+                    {active && (
+                      <Ionicons name="checkmark" size={16} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={[styles.poiMenuSeparator, { backgroundColor: colors.border }]} />
+              <TouchableOpacity
+                onPress={() => setPoiAlongRoute((v) => !v)}
+                disabled={!routePlan?.coordinates?.length}
+                style={styles.poiMenuItem}
+                testID="poi-toggle-along-route"
+              >
+                <Ionicons
+                  name="navigate"
+                  size={15}
+                  color={
+                    routePlan?.coordinates?.length
+                      ? colors.primary
+                      : colors.mutedForeground
+                  }
+                />
+                <Text
+                  style={[
+                    styles.poiMenuLabel,
+                    {
+                      color: routePlan?.coordinates?.length
+                        ? colors.foreground
+                        : colors.mutedForeground,
+                      fontFamily: "Inter_400Regular",
+                    },
+                  ]}
+                >
+                  Alleen langs mijn route
+                </Text>
+                {poiAlongRoute && !!routePlan?.coordinates?.length && (
+                  <Ionicons name="checkmark" size={16} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+              {poiCategories.length > 0 && !showNodes && (
+                <Text
+                  style={[
+                    styles.poiMenuHint,
+                    { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+                  ]}
+                >
+                  Zoom in om punten te zien
+                </Text>
+              )}
+            </View>
+          )}
+        </>
+      )}
+
       {networkLoading && !isRiding && (
-        <View style={[styles.loadingIndicator, { top: topPad + 76, right: 16 }]}>
+        <View style={[styles.loadingIndicator, { top: topPad + 128, right: 16 }]}>
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
       )}
@@ -571,6 +757,61 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  poiMarker: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  poiMenu: {
+    position: "absolute",
+    minWidth: 220,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 30,
+  },
+  poiMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  poiMenuDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  poiMenuLabel: {
+    fontSize: 13,
+    flex: 1,
+  },
+  poiMenuSeparator: {
+    height: 1,
+    marginVertical: 4,
+  },
+  poiMenuHint: {
+    fontSize: 11,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
+    paddingTop: 2,
   },
   loadingIndicator: {
     position: "absolute",

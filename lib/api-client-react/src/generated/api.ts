@@ -27,11 +27,13 @@ import type {
   ElevationProfileResult,
   GeocodeMunicipalityParams,
   GetNetworkParams,
+  GetPoisParams,
   HealthStatus,
   MunicipalityResult,
   MyAccess,
   NetworkData,
   NetworkDatasetStatus,
+  PoiData,
   Region,
   RoutePlan,
   RouteRequest,
@@ -292,6 +294,92 @@ export function useGetNetworkStatus<TData = Awaited<ReturnType<typeof getNetwork
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetNetworkStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPoisUrl = (params: GetPoisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/pois?${stringifiedParams}` : `/api/pois`
+}
+
+/**
+ * Returns points of interest (cafés/restaurants, bike shops, sights, ferries, toilets) within the given bounding box, sourced from OpenStreetMap and cached. Categories are requested explicitly so only the toggled-on kinds are fetched.
+
+ * @summary Get points of interest for a bounding box
+ */
+export const getPois = async (params: GetPoisParams, options?: RequestInit): Promise<PoiData> => {
+
+  return customFetch<PoiData>(getGetPoisUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPoisQueryKey = (params?: GetPoisParams,) => {
+    return [
+    `/api/pois`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPoisQueryOptions = <TData = Awaited<ReturnType<typeof getPois>>, TError = ErrorType<ApiError>>(params: GetPoisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPois>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPoisQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPois>>> = ({ signal }) => getPois(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPois>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPoisQueryResult = NonNullable<Awaited<ReturnType<typeof getPois>>>
+export type GetPoisQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get points of interest for a bounding box
+ */
+
+export function useGetPois<TData = Awaited<ReturnType<typeof getPois>>, TError = ErrorType<ApiError>>(
+ params: GetPoisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPois>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPoisQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

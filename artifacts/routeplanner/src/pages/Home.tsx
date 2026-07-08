@@ -52,8 +52,13 @@ import {
   useGetNetworkStatus,
   getGetNetworkStatusQueryKey,
   shareRoute,
+  useGetPois,
+  getGetPoisQueryKey,
 } from "@workspace/api-client-react";
 import type { MunicipalityResult } from "@workspace/api-client-react";
+import { useDebounce } from "use-debounce";
+import { keepPreviousData } from "@tanstack/react-query";
+import { filterPoisAlongRoute, type PoiCategory } from "@/lib/poi";
 import {
   Dialog,
   DialogContent,
@@ -166,6 +171,46 @@ export default function Home() {
   );
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // Points of interest: which categories the user toggled on, plus the
+  // "only along my route" corridor filter. POIs are fetched for the current
+  // (debounced) viewport and only when at least one category is active.
+  const [poiCategories, setPoiCategories] = useState<PoiCategory[]>([]);
+  const [poiAlongRoute, setPoiAlongRoute] = useState(false);
+  const [debouncedPoiBbox] = useDebounce(bbox, 400);
+  const poiCategoriesParam = [...poiCategories].sort().join(",");
+  const poisEnabled = poiCategories.length > 0 && !!debouncedPoiBbox;
+  const { data: poiData } = useGetPois(
+    { bbox: debouncedPoiBbox, categories: poiCategoriesParam },
+    {
+      query: {
+        queryKey: getGetPoisQueryKey({
+          bbox: debouncedPoiBbox,
+          categories: poiCategoriesParam,
+        }),
+        enabled: poisEnabled,
+        staleTime: 5 * 60 * 1000,
+        placeholderData: keepPreviousData,
+      },
+    },
+  );
+
+  const togglePoiCategory = useCallback((category: PoiCategory) => {
+    setPoiCategories((prev) =>
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : [...prev, category],
+    );
+  }, []);
+
+  const routeCoordinates = routePlan?.coordinates ?? null;
+  const visiblePois = React.useMemo(() => {
+    const all = poisEnabled ? (poiData?.pois ?? []) : [];
+    if (!poiAlongRoute || !routeCoordinates || routeCoordinates.length === 0) {
+      return all;
+    }
+    return filterPoisAlongRoute(all, routeCoordinates);
+  }, [poisEnabled, poiData, poiAlongRoute, routeCoordinates]);
 
   const initialBounds = initialFavorite?.boundingBox ?? null;
 
@@ -990,6 +1035,12 @@ export default function Home() {
           followRide={followRide}
           onFollowPause={pauseFollow}
           onFollowResume={resumeFollow}
+          pois={visiblePois}
+          poiCategories={poiCategories}
+          onTogglePoiCategory={togglePoiCategory}
+          poiAlongRoute={poiAlongRoute}
+          onTogglePoiAlongRoute={() => setPoiAlongRoute((v) => !v)}
+          poiAlongRouteAvailable={!!routeCoordinates && routeCoordinates.length > 0}
         />
       </div>
 

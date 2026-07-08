@@ -87,6 +87,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NetworkDatasetStatus"
+  /pois:
+    get:
+      operationId: getPois
+      tags: [network]
+      summary: Get points of interest for a bounding box
+      description: >
+        Returns points of interest (cafés/restaurants, bike shops, sights,
+        ferries, toilets) within the given bounding box, sourced from
+        OpenStreetMap and cached. Categories are requested explicitly so only
+        the toggled-on kinds are fetched.
+      parameters:
+        - name: bbox
+          in: query
+          required: true
+          description: "Bounding box as minLon,minLat,maxLon,maxLat (WGS84)."
+          schema:
+            type: string
+        - name: categories
+          in: query
+          required: true
+          description: >
+            Comma-separated POI categories to include. Allowed values:
+            cafe, bike_shop, sights, ferry, toilets.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Points of interest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoiData"
+        "400":
+          description: Invalid bounding box or categories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Upstream data source error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /route:
     post:
       operationId: planRoute
@@ -648,6 +692,42 @@ components:
       required:
         - nodes
         - segments
+        - truncated
+    Poi:
+      type: object
+      description: A point of interest near the cycling network.
+      properties:
+        id:
+          type: string
+          description: Stable OSM element id (prefixed with its element type).
+        name:
+          type: [string, "null"]
+          description: The POI's name, or null if unnamed in OSM.
+        category:
+          type: string
+          enum: [cafe, bike_shop, sights, ferry, toilets]
+        lat:
+          type: number
+        lon:
+          type: number
+      required:
+        - id
+        - name
+        - category
+        - lat
+        - lon
+    PoiData:
+      type: object
+      properties:
+        pois:
+          type: array
+          items:
+            $ref: "#/components/schemas/Poi"
+        truncated:
+          type: boolean
+          description: True if the area was too large and results were limited.
+      required:
+        - pois
         - truncated
     NetworkDatasetStatus:
       type: object

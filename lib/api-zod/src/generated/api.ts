@@ -61,6 +61,28 @@ export const GetNetworkStatusResponse = zod.object({
 
 
 /**
+ * Returns points of interest (cafés/restaurants, bike shops, sights, ferries, toilets) within the given bounding box, sourced from OpenStreetMap and cached. Categories are requested explicitly so only the toggled-on kinds are fetched.
+
+ * @summary Get points of interest for a bounding box
+ */
+export const GetPoisQueryParams = zod.object({
+  "bbox": zod.coerce.string().describe('Bounding box as minLon,minLat,maxLon,maxLat (WGS84).'),
+  "categories": zod.coerce.string().describe('Comma-separated POI categories to include. Allowed values: cafe, bike_shop, sights, ferry, toilets.\n')
+})
+
+export const GetPoisResponse = zod.object({
+  "pois": zod.array(zod.object({
+  "id": zod.string().describe('Stable OSM element id (prefixed with its element type).'),
+  "name": zod.string().nullable().describe('The POI\'s name, or null if unnamed in OSM.'),
+  "category": zod.enum(['cafe', 'bike_shop', 'sights', 'ferry', 'toilets']),
+  "lat": zod.number(),
+  "lon": zod.number()
+}).describe('A point of interest near the cycling network.')),
+  "truncated": zod.boolean().describe('True if the area was too large and results were limited.')
+})
+
+
+/**
  * Given an ordered list of selected nodes, computes the route that follows the cycling network segments between each consecutive pair of nodes, returning the full geometry, the ordered node numbers, and the total distance.
 
  * @summary Plan a route along the node network
