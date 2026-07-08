@@ -44,6 +44,14 @@ vi.mock("@/lib/localRoutes", () => ({
   saveLocalRoute: vi.fn(),
 }));
 
+const gpxState = vi.hoisted(() => ({
+  exportRouteAsGpx: vi.fn(async (_arg: unknown) => {}),
+}));
+
+vi.mock("@/lib/gpxExport", () => ({
+  exportRouteAsGpx: (arg: unknown) => gpxState.exportRouteAsGpx(arg),
+}));
+
 const NODE_A: NetworkNode = { id: "1", ref: "63", lat: 52.0, lon: 5.0 };
 const NODE_B: NetworkNode = { id: "2", ref: "08", lat: 52.01, lon: 5.01 };
 
@@ -100,6 +108,7 @@ function Harness() {
 
 afterEach(() => {
   apiState.planRoute.mockReset();
+  gpxState.exportRouteAsGpx.mockClear();
   cleanup();
 });
 
@@ -144,6 +153,39 @@ describe("RoutePanel", () => {
     await waitFor(() =>
       expect(screen.getByText("Kan route niet berekenen")).toBeTruthy(),
     );
+  });
+
+  it("hides the GPX export button until a route is planned", () => {
+    apiState.planRoute.mockResolvedValue(makePlan(4200));
+    render(<Harness />);
+
+    fireEvent.click(screen.getByTestId("add-a"));
+
+    // One node -> no plan yet -> no export button.
+    expect(screen.queryByTestId("export-gpx")).toBeNull();
+  });
+
+  it("exports the planned route with node waypoints via the share flow", async () => {
+    apiState.planRoute.mockResolvedValue(makePlan(4200));
+    render(<HarnessWithTwo />);
+
+    fireEvent.click(screen.getByTestId("add-both"));
+
+    await waitFor(() => expect(screen.getByTestId("export-gpx")).toBeTruthy());
+    fireEvent.click(screen.getByTestId("export-gpx"));
+
+    await waitFor(() => expect(gpxState.exportRouteAsGpx).toHaveBeenCalledTimes(1));
+    expect(gpxState.exportRouteAsGpx).toHaveBeenCalledWith({
+      coordinates: [
+        [5.0, 52.0],
+        [5.01, 52.01],
+      ],
+      name: "Fietsroute",
+      waypoints: [
+        { ref: "63", lat: 52.0, lon: 5.0 },
+        { ref: "08", lat: 52.01, lon: 5.01 },
+      ],
+    });
   });
 });
 

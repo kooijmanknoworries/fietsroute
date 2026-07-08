@@ -23,6 +23,14 @@ export default defineConfig({
         replacement: path.resolve(dir, "test/mocks/expo-speech.ts"),
       },
       {
+        find: /^expo-file-system$/,
+        replacement: path.resolve(dir, "test/mocks/expo-file-system.ts"),
+      },
+      {
+        find: /^expo-sharing$/,
+        replacement: path.resolve(dir, "test/mocks/expo-sharing.ts"),
+      },
+      {
         find: /^react-native-reanimated$/,
         replacement: path.resolve(dir, "test/mocks/reanimated.tsx"),
       },

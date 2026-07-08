@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,6 +22,7 @@ import { useRideContext } from "@/context/RideContext";
 import { useAccessStatus } from "@/hooks/useAccessStatus";
 import SaveRouteModal from "@/components/SaveRouteModal";
 import ElevationProfile from "@/components/ElevationProfile";
+import { exportRouteAsGpx } from "@/lib/gpxExport";
 
 function formatDistance(meters: number): string {
   if (meters >= 1000) {
@@ -41,8 +43,29 @@ export default function RoutePanel() {
   const writeBlocked = isPending || isRejected;
 
   const [saveVisible, setSaveVisible] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const canSave = selectedNodes.length >= 2 && !!routePlan && !writeBlocked;
+  const canExport = !!routePlan && routePlan.coordinates.length > 0;
+
+  const handleExportGpx = async () => {
+    if (!routePlan || exporting) return;
+    setExporting(true);
+    try {
+      await exportRouteAsGpx({
+        coordinates: routePlan.coordinates,
+        name: "Fietsroute",
+        waypoints: selectedNodes.map((n) => ({ ref: n.ref, lat: n.lat, lon: n.lon })),
+      });
+    } catch (err) {
+      Alert.alert(
+        "Exporteren mislukt",
+        err instanceof Error ? err.message : "Kon het GPX-bestand niet delen."
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const translateY = useSharedValue(200);
 
@@ -108,6 +131,20 @@ export default function RoutePanel() {
             >
               <Ionicons name="bookmark-outline" size={16} color="#ffffff" />
               <Text style={[styles.saveBtnText, { fontFamily: "Inter_600SemiBold" }]}>Opslaan</Text>
+            </TouchableOpacity>
+          )}
+          {canExport && (
+            <TouchableOpacity
+              onPress={handleExportGpx}
+              disabled={exporting}
+              style={[styles.iconBtn, { backgroundColor: colors.muted }]}
+              testID="export-gpx"
+            >
+              {exporting ? (
+                <ActivityIndicator size="small" color={colors.foreground} />
+              ) : (
+                <Ionicons name="share-outline" size={18} color={colors.foreground} />
+              )}
             </TouchableOpacity>
           )}
           {selectedNodes.length > 1 && (

@@ -240,7 +240,11 @@ export default function Home() {
 
   const handleExportGPX = () => {
     if (routePlan?.coordinates && routePlan.coordinates.length > 0) {
-      exportGPX(routePlan.coordinates, "Fietsroute");
+      exportGPX(
+        routePlan.coordinates,
+        "Fietsroute",
+        selectedNodes.map((n) => ({ ref: n.ref, lat: n.lat, lon: n.lon }))
+      );
     }
   };
 

@@ -64,9 +64,12 @@
     "typescript": "~5.9.2",
     "vitest": "^4.1.8",
     "zod": "catalog:",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "@workspace/gpx": "workspace:*"
   },
   "dependencies": {
+    "expo-file-system": "~19.0.23",
+    "expo-sharing": "~14.0.8",
     "expo-speech": "~14.0.8",
     "leaflet": "1.9.4",
     "react-native-maps": "1.18.0"

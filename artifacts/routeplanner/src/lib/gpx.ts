@@ -1,19 +1,17 @@
-export function exportGPX(coordinates: number[][], name: string = "Fietsroute") {
-  const gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Fietsrouteplanner" xmlns="http://www.topografix.com/GPX/1/1">
-  <trk>
-    <name>${name}</name>
-    <trkseg>
-${coordinates.map(coord => `      <trkpt lat="${coord[1]}" lon="${coord[0]}"></trkpt>`).join("\n")}
-    </trkseg>
-  </trk>
-</gpx>`;
+import { generateGpx, gpxFileName, type GpxWaypoint } from "@workspace/gpx";
+
+export function exportGPX(
+  coordinates: number[][],
+  name: string = "Fietsroute",
+  waypoints: GpxWaypoint[] = []
+) {
+  const gpxContent = generateGpx(coordinates, { name, waypoints });
 
   const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${name.replace(/\s+/g, "_")}.gpx`;
+  link.download = gpxFileName(name);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

@@ -83,6 +83,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.7.3",
-    "@clerk/themes": "^2.4.57"
+    "@clerk/themes": "^2.4.57",
+    "@workspace/gpx": "workspace:*"
   }
 }

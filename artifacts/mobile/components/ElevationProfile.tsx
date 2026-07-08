@@ -69,7 +69,7 @@ export default function ElevationProfile({ coordinates }: Props) {
       CHART_HEIGHT - 6 - ((e - min) / span) * (CHART_HEIGHT - 12);
     linePath = profile.points
       .map(
-        (p, i) =>
+        (p: { distanceMeters: number; elevationMeters: number }, i: number) =>
           `${i === 0 ? "M" : "L"}${px(p.distanceMeters).toFixed(1)},${py(p.elevationMeters).toFixed(1)}`,
       )
       .join(" ");
