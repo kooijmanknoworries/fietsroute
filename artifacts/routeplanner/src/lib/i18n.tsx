@@ -335,7 +335,7 @@ const nl: Record<TranslationKey, string> = {
   "saved.renameRoute": "Route hernoemen",
   "saved.deleteRoute": "Route verwijderen",
 
-  "print.button": "Routekaart afdrukken",
+  "print.button": "Print route",
   "share.button": "Link delen",
   "toast.shareCopied.title": "Link gekopieerd",
   "toast.shareCopied.desc": "Iedereen met deze link kan de route bekijken — geen account nodig.",
