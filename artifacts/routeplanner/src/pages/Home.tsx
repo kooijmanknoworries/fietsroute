@@ -698,21 +698,6 @@ export default function Home() {
                 >
                   {t("mode.network")}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setPlanMode("offgrid")}
-                  aria-pressed={planMode === "offgrid"}
-                  title={t("mode.offgridTitle")}
-                  className={
-                    "px-2.5 py-1.5 transition-colors " +
-                    (planMode === "offgrid"
-                      ? "bg-amber-600 text-white"
-                      : "text-muted-foreground hover:bg-accent")
-                  }
-                  data-testid="mode-offgrid"
-                >
-                  {t("mode.offgrid")}
-                </button>
               </div>
             </div>
             <div className="flex items-center justify-end -mt-2">
@@ -728,15 +713,9 @@ export default function Home() {
               )}
             </div>
 
-            {planMode === "offgrid" && (
-              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">
-                {t("mode.offgridHint")}
-              </div>
-            )}
-
             {selectedNodes.length === 0 ? (
               <div className="text-sm text-muted-foreground bg-muted p-4 rounded-lg border border-border/50 text-center">
-                {planMode === "offgrid" ? t("route.emptyHintOffgrid") : t("route.emptyHint")}
+                {t("route.emptyHint")}
               </div>
             ) : (
               <div className="space-y-4">

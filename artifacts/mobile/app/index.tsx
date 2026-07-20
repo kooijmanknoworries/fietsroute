@@ -412,49 +412,6 @@ function MapScreenInner() {
               Knooppunt
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setPlanMode("offgrid")}
-            style={[
-              styles.modeBtn,
-              planMode === "offgrid" && { backgroundColor: "#d97706" },
-            ]}
-            testID="mode-offgrid"
-          >
-            <Text
-              style={[
-                styles.modeBtnText,
-                {
-                  color: planMode === "offgrid" ? "#ffffff" : colors.mutedForeground,
-                  fontFamily: "Inter_600SemiBold",
-                },
-              ]}
-            >
-              Offgrid
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {planMode === "offgrid" && !isRiding && (
-        <View
-          style={[
-            styles.offgridHint,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              top: topPad + 110,
-            },
-          ]}
-        >
-          <Ionicons name="navigate-outline" size={14} color="#d97706" />
-          <Text
-            style={[
-              styles.zoomHintText,
-              { color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-            ]}
-          >
-            Tik op de kaart voor een vrij punt
-          </Text>
         </View>
       )}
 
