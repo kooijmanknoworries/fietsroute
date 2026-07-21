@@ -119,6 +119,8 @@ const en = {
   "ride.summary.totalSegments": "Lifetime segments",
   "ride.summary.done": "Done",
 
+  "voice.label": "Voice guidance",
+
   "saved.title": "Saved Routes",
   "saved.loading": "Loading saved routes...",
   "saved.empty": 'No saved routes yet. Plan a route and tap "Save route" to keep it.',
@@ -326,6 +328,8 @@ const nl: Record<TranslationKey, string> = {
   "ride.summary.newSegments": "Nieuwe segmenten ontgrendeld",
   "ride.summary.totalSegments": "Totaal aantal segmenten",
   "ride.summary.done": "Klaar",
+
+  "voice.label": "Gesproken navigatie",
   "route.nodesCount": "{count} knooppunten",
 
   "saved.title": "Opgeslagen routes",

@@ -80,6 +80,13 @@ export interface RideState {
   traveledCoordinates: number[][] | null;
   /** Distance ridden so far, in metres. */
   progressMeters: number;
+  /**
+   * Absolute distance (metres) of the live position along the planned route,
+   * measured from the route start. Unlike `progressMeters` (which is relative
+   * to where the ride began), this is the along-route position voice guidance
+   * uses to decide which maneuver comes next.
+   */
+  routeProgressMeters: number;
   /** Total planned distance, in metres. */
   totalMeters: number;
   /** Lock markers: persisted history merged with this ride's completions. */
@@ -455,6 +462,7 @@ export function useRide({
     resumeFollow,
     traveledCoordinates,
     progressMeters,
+    routeProgressMeters,
     totalMeters,
     lockPoints,
     rideSummary,

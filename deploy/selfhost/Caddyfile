@@ -4,6 +4,12 @@
 #                    Let's Encrypt (port 80 auto-redirects to 443)
 {$SITE_ADDRESS} {
         encode gzip
+        # Dutch text-to-speech (Piper) for turn-by-turn voice guidance. Same
+        # origin as the app, so the browser calls it with no CORS/mixed-content.
+        # handle_path strips /voice, so /voice/tts -> piper-tts:8020/tts.
+        handle_path /voice/* {
+                reverse_proxy piper-tts:8020
+        }
         reverse_proxy web:8080
 }
 
@@ -12,5 +18,8 @@
 # http://192.168.3.71 alongside the public HTTPS domain above.
 http://192.168.3.71 {
         encode gzip
+        handle_path /voice/* {
+                reverse_proxy piper-tts:8020
+        }
         reverse_proxy web:8080
 }

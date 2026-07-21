@@ -30,7 +30,9 @@ import {
   Gauge,
   Users,
   Printer,
-  Share2
+  Share2,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -70,6 +72,9 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useRoutePlanner } from "@/hooks/use-route-planner";
 import { useRide } from "@/hooks/use-ride";
+import { useVoiceGuidance } from "@/hooks/use-voice-guidance";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { exportGPX, parseGPX } from "@/lib/gpx";
 import Map from "@/components/Map";
 import ElevationProfile from "@/components/ElevationProfile";
@@ -155,11 +160,18 @@ export default function Home() {
     resumeFollow,
     traveledCoordinates,
     progressMeters,
+    routeProgressMeters,
     totalMeters,
     lockPoints,
     rideSummary,
     dismissRideSummary,
   } = useRide({ routePlan, selectedNodes, isSignedIn: !!user });
+  const voiceGuidance = useVoiceGuidance({
+    routePlan,
+    selectedNodes,
+    isRiding,
+    routeProgressMeters,
+  });
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -866,6 +878,30 @@ export default function Home() {
                         >
                           <Square className="mr-2 h-4 w-4" /> {t("ride.stop")}
                         </Button>
+                      </div>
+                    )}
+
+                    {/* Dutch voice guidance toggle (Nathalie). Hidden when the
+                        browser can't play audio. */}
+                    {!voiceGuidance.unsupported && (
+                      <div className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+                        <Label
+                          htmlFor="voice-guidance"
+                          className="flex items-center gap-2 text-sm font-normal cursor-pointer"
+                        >
+                          {voiceGuidance.enabled ? (
+                            <Volume2 className="h-4 w-4 text-primary" />
+                          ) : (
+                            <VolumeX className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          {t("voice.label")}
+                        </Label>
+                        <Switch
+                          id="voice-guidance"
+                          checked={voiceGuidance.enabled}
+                          onCheckedChange={voiceGuidance.setEnabled}
+                          data-testid="voice-guidance-toggle"
+                        />
                       </div>
                     )}
                   </div>
