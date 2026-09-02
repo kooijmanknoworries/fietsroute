@@ -67,6 +67,15 @@ const en = {
   "muni.opensAtPrefix": "Opens at",
   "muni.clearFavorite": "Clear home town",
 
+  "holiday.toggle": "Holiday mode",
+  "holiday.toggleTitle": "Search for a holiday park as starting point",
+  "holiday.searchButton": "Search holiday park...",
+  "holiday.inputPlaceholder": "Type park or village name...",
+  "holiday.noResults": "No parks found.",
+  "holiday.typeMore": "Type at least 1 character to search.",
+  "holiday.selected": "Holiday park selected",
+  "holiday.cleared": "Holiday park cleared",
+
   "network.loading": "Loading network...",
   "network.zoomInTitle": "Zoom in",
   "network.zoomInDesc": "Zoom in closer to see all cycling nodes in this area.",
@@ -277,6 +286,15 @@ const nl: Record<TranslationKey, string> = {
   "muni.setFavorite": "Instellen als woonplaats (standaard start)",
   "muni.opensAtPrefix": "Opent bij",
   "muni.clearFavorite": "Woonplaats wissen",
+
+  "holiday.toggle": "Vakantiemode",
+  "holiday.toggleTitle": "Zoek een vakantiepark als startpunt",
+  "holiday.searchButton": "Zoek vakantiepark...",
+  "holiday.inputPlaceholder": "Typ park- of dorpnaam...",
+  "holiday.noResults": "Geen parken gevonden.",
+  "holiday.typeMore": "Typ minstens 1 teken om te zoeken.",
+  "holiday.selected": "Vakantiepark geselecteerd",
+  "holiday.cleared": "Vakantiepark gewist",
 
   "network.loading": "Netwerk laden...",
   "network.zoomInTitle": "Zoom in",

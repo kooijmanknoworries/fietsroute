@@ -32,7 +32,9 @@ import {
   Printer,
   Share2,
   Volume2,
-  VolumeX
+  VolumeX,
+  TentTree,
+  Trees
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,6 +51,8 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useMunicipality } from "@/hooks/use-municipality";
+import { useHolidayParks } from "@/hooks/use-holiday-parks";
+import type { HolidayPark } from "@/lib/holiday-parks";
 import { useAccessStatus } from "@/hooks/use-access-status";
 import {
   useGetNetworkStatus,
@@ -125,6 +129,16 @@ export default function Home() {
     saveFavorite,
     removeFavorite,
   } = useMunicipality();
+
+  const {
+    query: holidayParkQuery,
+    setQuery: setHolidayParkQuery,
+    results: holidayParkResults,
+    selectedPark,
+    selectPark,
+    clearPark,
+  } = useHolidayParks();
+  const [holidayParkOpen, setHolidayParkOpen] = useState(false);
 
   // Dataset readiness: when the preloaded network isn't complete yet, the API
   // falls back to slow live queries. Poll periodically while it's not ready so
@@ -295,6 +309,14 @@ export default function Home() {
       setBoundaryGeometry(m.geometry ?? null);
       toast({ title: t("toast.favSet.title"), description: t("toast.favSet.desc", { name: m.name }) });
     }
+  };
+
+  const handleSelectHolidayPark = (park: HolidayPark) => {
+    selectPark(park);
+    setFitBounds({ south: park.lat - 0.01, north: park.lat + 0.01, west: park.lon - 0.015, east: park.lon + 0.015 });
+    setHolidayParkOpen(false);
+    setHolidayParkQuery("");
+    toast({ title: t("holiday.selected"), description: park.displayName });
   };
 
   const canSave = !!routePlan && selectedNodes.length >= 2 && isApproved;
@@ -640,6 +662,80 @@ export default function Home() {
                   <X className="h-3.5 w-3.5 text-muted-foreground" />
                 </button>
               </div>
+            )}
+          </div>
+
+          {/* Vakantiemode */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+                <TentTree className="h-4 w-4" /> {t("holiday.toggle")}
+              </label>
+              <Switch
+                checked={!!selectedPark}
+                onCheckedChange={(on) => {
+                  if (!on) {
+                    clearPark();
+                    toast({ title: t("holiday.cleared") });
+                  } else {
+                    setHolidayParkOpen(true);
+                  }
+                }}
+                title={t("holiday.toggleTitle")}
+              />
+            </div>
+            {selectedPark && (
+              <Popover open={holidayParkOpen} onOpenChange={setHolidayParkOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-start font-normal text-muted-foreground"
+                  >
+                    <Trees className="mr-2 h-4 w-4" />
+                    {selectedPark.name}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder={t("holiday.inputPlaceholder")}
+                      value={holidayParkQuery}
+                      onValueChange={setHolidayParkQuery}
+                    />
+                    <CommandList>
+                      {holidayParkQuery.trim().length >= 1 && (
+                        <CommandEmpty>{t("holiday.noResults")}</CommandEmpty>
+                      )}
+                      {holidayParkQuery.trim().length < 1 && (
+                        <div className="px-3 py-4 text-sm text-muted-foreground">
+                          {t("holiday.typeMore")}
+                        </div>
+                      )}
+                      {holidayParkResults.length > 0 && (
+                        <CommandGroup>
+                          {holidayParkResults.map((park) => (
+                            <CommandItem
+                              key={park.id}
+                              value={park.id}
+                              onSelect={() => handleSelectHolidayPark(park)}
+                              className="flex items-start gap-2"
+                            >
+                              <Trees className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium">{park.name}</div>
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {park.displayName}
+                                </div>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             )}
           </div>
 
