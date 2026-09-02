@@ -313,10 +313,11 @@ export default function Home() {
 
   const handleSelectHolidayPark = (park: HolidayPark) => {
     selectPark(park);
-    setFitBounds({ south: park.lat - 0.01, north: park.lat + 0.01, west: park.lon - 0.015, east: park.lon + 0.015 });
+    const bounds = { south: park.lat - 0.01, north: park.lat + 0.01, west: park.lon - 0.015, east: park.lon + 0.015 };
+    setFitBounds(bounds);
     setHolidayParkOpen(false);
     setHolidayParkQuery("");
-    toast({ title: t("holiday.selected"), description: park.displayName });
+    toast({ title: t("holiday.selected"), description: `${park.displayName} (${park.lat}, ${park.lon})` });
   };
 
   const canSave = !!routePlan && selectedNodes.length >= 2 && isApproved;
