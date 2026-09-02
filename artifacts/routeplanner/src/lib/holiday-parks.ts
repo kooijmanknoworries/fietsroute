@@ -37,6 +37,8 @@ export const holidayParks: HolidayPark[] = [
   { id: "landal-de-kruin", name: "Landal GreenParks De Kruin", displayName: "Ede", lat: 51.9500, lon: 5.6500, zoom: 14 },
   { id: "landal-de-haamslager", name: "Landal GreenParks De Haamslager", displayName: "Haamstede", lat: 51.5350, lon: 4.2350, zoom: 14 },
   { id: "landal-de-houtwijk", name: "Landal GreenParks De Houtwijk", displayName: "Lauwersoog", lat: 53.4400, lon: 6.4700, zoom: 14 },
+  { id: "landal-beekbergen", name: "Landal GreenParks Beekbergen", displayName: "Beekbergen", lat: 52.3667, lon: 6.0667, zoom: 14 },
+  { id: "landal-heideheuvel", name: "Landal GreenParks De Heideheuvel", displayName: "Beekbergen", lat: 52.3700, lon: 6.0800, zoom: 14 },
 
   // Center Parcs
   { id: "center-parcs-velsemeersen", name: "Center Parcs Veluwezoom", displayName: "Otterlo", lat: 52.0500, lon: 5.9000, zoom: 14 },
@@ -45,6 +47,7 @@ export const holidayParks: HolidayPark[] = [
   { id: "center-parcs-norburg", name: "Center Parcs Norburg", displayName: "Norg", lat: 52.9100, lon: 6.6300, zoom: 14 },
   { id: "center-parcs-eifel", name: "Center Parcs Eifel", displayName: "Duitsland (bij Grens)", lat: 50.5200, lon: 6.4500, zoom: 14 },
   { id: "center-parcs-tourtenhout", name: "Center Parcs Tourtenhout", displayName: "Mheer", lat: 50.8300, lon: 5.9500, zoom: 14 },
+  { id: "center-parcs-beekbergen", name: "Center Parcs Beekbergen", displayName: "Beekbergen", lat: 52.3700, lon: 6.0700, zoom: 14 },
 
   // Airstop
   { id: "airstop-haamstede", name: "Airstop Haamstede", displayName: "Haamstede", lat: 51.5450, lon: 4.2450, zoom: 15 },

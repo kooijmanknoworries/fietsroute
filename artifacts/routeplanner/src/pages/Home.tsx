@@ -672,71 +672,68 @@ export default function Home() {
                 <TentTree className="h-4 w-4" /> {t("holiday.toggle")}
               </label>
               <Switch
-                checked={!!selectedPark}
+                checked={holidayParkOpen}
                 onCheckedChange={(on) => {
+                  setHolidayParkOpen(on);
                   if (!on) {
                     clearPark();
                     toast({ title: t("holiday.cleared") });
-                  } else {
-                    setHolidayParkOpen(true);
                   }
                 }}
                 title={t("holiday.toggleTitle")}
               />
             </div>
-            {selectedPark && (
-              <Popover open={holidayParkOpen} onOpenChange={setHolidayParkOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-start font-normal text-muted-foreground"
-                  >
-                    <Trees className="mr-2 h-4 w-4" />
-                    {selectedPark.name}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-                  <Command shouldFilter={false}>
-                    <CommandInput
-                      placeholder={t("holiday.inputPlaceholder")}
-                      value={holidayParkQuery}
-                      onValueChange={setHolidayParkQuery}
-                    />
-                    <CommandList>
-                      {holidayParkQuery.trim().length >= 1 && (
-                        <CommandEmpty>{t("holiday.noResults")}</CommandEmpty>
-                      )}
-                      {holidayParkQuery.trim().length < 1 && (
-                        <div className="px-3 py-4 text-sm text-muted-foreground">
-                          {t("holiday.typeMore")}
-                        </div>
-                      )}
-                      {holidayParkResults.length > 0 && (
-                        <CommandGroup>
-                          {holidayParkResults.map((park) => (
-                            <CommandItem
-                              key={park.id}
-                              value={park.id}
-                              onSelect={() => handleSelectHolidayPark(park)}
-                              className="flex items-start gap-2"
-                            >
-                              <Trees className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-medium">{park.name}</div>
-                                <div className="truncate text-xs text-muted-foreground">
-                                  {park.displayName}
-                                </div>
+            <Popover open={holidayParkOpen} onOpenChange={setHolidayParkOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-start font-normal text-muted-foreground"
+                >
+                  <Trees className="mr-2 h-4 w-4" />
+                  {selectedPark ? selectedPark.name : t("holiday.searchButton")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    placeholder={t("holiday.inputPlaceholder")}
+                    value={holidayParkQuery}
+                    onValueChange={setHolidayParkQuery}
+                  />
+                  <CommandList>
+                    {holidayParkQuery.trim().length >= 1 && (
+                      <CommandEmpty>{t("holiday.noResults")}</CommandEmpty>
+                    )}
+                    {holidayParkQuery.trim().length < 1 && (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        {t("holiday.typeMore")}
+                      </div>
+                    )}
+                    {holidayParkResults.length > 0 && (
+                      <CommandGroup>
+                        {holidayParkResults.map((park) => (
+                          <CommandItem
+                            key={park.id}
+                            value={park.id}
+                            onSelect={() => handleSelectHolidayPark(park)}
+                            className="flex items-start gap-2"
+                          >
+                            <Trees className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate font-medium">{park.name}</div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {park.displayName}
                               </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      )}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <Separator />
