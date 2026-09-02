@@ -87,6 +87,8 @@ const en = {
   "tripGen.tooFewNodesDesc": "Not enough knooppunten found for {targetKm} km. Try a shorter distance or zoom in closer.",
   "tripGen.locationError": "Location error",
   "tripGen.locationErrorDesc": "Could not get your location. Make sure location access is enabled.",
+  "tripGen.gpsFallback": "Using map center",
+  "tripGen.gpsFallbackDesc": "GPS not available — using your current map view as starting point.",
 
   "network.loading": "Loading network...",
   "network.zoomInTitle": "Zoom in",
@@ -319,6 +321,8 @@ const nl: Record<TranslationKey, string> = {
   "tripGen.tooFewNodesDesc": "Niet genoeg knooppunten gevonden voor {targetKm} km. Probeer een kortere afstand of zoom dichter in.",
   "tripGen.locationError": "Locatiefout",
   "tripGen.locationErrorDesc": "Kon je locatie niet ophalen. Zorg dat locatie-toegang is ingeschakeld.",
+  "tripGen.gpsFallback": "Gebruik kaartcentrum",
+  "tripGen.gpsFallbackDesc": "GPS niet beschikbaar — je huidige kaartweergave wordt als startpunt gebruikt.",
 
   "network.loading": "Netwerk laden...",
   "network.zoomInTitle": "Zoom in",

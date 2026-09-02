@@ -331,77 +331,103 @@ export default function Home() {
 
     setIsGeneratingTrip(true);
 
-    // Get user's GPS position
+    let userLon: number | null = null;
+    let userLat: number | null = null;
+
+    // Try GPS first, fall back to map viewport center
     try {
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 5000,
         });
       });
-
-      const userLon = position.coords.longitude;
-      const userLat = position.coords.latitude;
-      const targetMeters = targetKm * 1000;
-
-      // Generate trip using the loaded network data
-      const trip = generateTripByDistance(
-        userLon,
-        userLat,
-        targetMeters,
-        networkData?.nodes || [],
-        networkData?.segments || [],
-      );
-
-      if (!trip) {
+      userLon = position.coords.longitude;
+      userLat = position.coords.latitude;
+    } catch {
+      // GPS not available — use map viewport center as fallback
+      let mapCenter: { lon: number; lat: number } | null = null;
+      if (ridePosition) {
+        mapCenter = { lon: ridePosition[0], lat: ridePosition[1] };
+      } else if (bbox) {
+        const [west, south, east, north] = bbox.split(",").map(Number);
+        mapCenter = { lon: (west + east) / 2, lat: (south + north) / 2 };
+      } else if (flyToRegion) {
+        mapCenter = { lon: flyToRegion.lon, lat: flyToRegion.lat };
+      }
+      if (mapCenter) {
+        userLon = mapCenter.lon;
+        userLat = mapCenter.lat;
         toast({
-          title: t("tripGen.noNetwork"),
-          description: t("tripGen.noNetworkDesc"),
+          title: t("tripGen.gpsFallback"),
+          description: t("tripGen.gpsFallbackDesc"),
         });
+      } else {
+        toast({
+          title: t("tripGen.locationError"),
+          description: t("tripGen.locationErrorDesc"),
+        });
+        setIsGeneratingTrip(false);
         return;
       }
-
-      if (trip.nodes.length < 2) {
-        toast({
-          title: t("tripGen.tooFewNodes"),
-          description: t("tripGen.tooFewNodesDesc", { targetKm }),
-        });
-        return;
-      }
-
-      // Set the generated nodes as selected
-      // The route will be planned automatically by the route planner
-      trip.nodes.forEach(node => handleNodeClick(node));
-
-      // Show summary toast
-      const accessKm = (trip.accessDistanceMeters / 1000).toFixed(1);
-      const routeKm = (trip.estimatedDistanceMeters / 1000).toFixed(1);
-      toast({
-        title: t("tripGen.generated"),
-        description: t("tripGen.generatedDesc", {
-          accessKm,
-          routeKm,
-          totalKm: (Number(accessKm) + Number(routeKm)).toFixed(1),
-          nodeCount: trip.nodes.length,
-        }),
-      });
-
-      // Fit map to show the starting area
-      const start = trip.startNode;
-      setFitBounds({
-        south: start.lat - 0.02,
-        north: start.lat + 0.02,
-        west: start.lon - 0.02,
-        east: start.lon + 0.02,
-      });
-    } catch (err) {
-      toast({
-        title: t("tripGen.locationError"),
-        description: err instanceof Error ? err.message : t("tripGen.locationErrorDesc"),
-      });
-    } finally {
-      setIsGeneratingTrip(false);
     }
+
+    // Generate trip using the loaded network data
+    const trip = generateTripByDistance(
+      userLon,
+      userLat,
+      targetKm * 1000,
+      networkData?.nodes || [],
+      networkData?.segments || [],
+    );
+
+    if (!trip) {
+      toast({
+        title: t("tripGen.noNetwork"),
+        description: t("tripGen.noNetworkDesc"),
+      });
+      setIsGeneratingTrip(false);
+      return;
+    }
+
+    if (trip.nodes.length < 2) {
+      toast({
+        title: t("tripGen.tooFewNodes"),
+        description: t("tripGen.tooFewNodesDesc", { targetKm }),
+      });
+      setIsGeneratingTrip(false);
+      return;
+    }
+
+    // Clear any existing route before adding new nodes
+    handleClear();
+
+    // Set the generated nodes as selected
+    trip.nodes.forEach(node => handleNodeClick(node));
+
+    // Show summary toast
+    const accessKm = (trip.accessDistanceMeters / 1000).toFixed(1);
+    const routeKm = (trip.estimatedDistanceMeters / 1000).toFixed(1);
+    toast({
+      title: t("tripGen.generated"),
+      description: t("tripGen.generatedDesc", {
+        accessKm,
+        routeKm,
+        totalKm: (Number(accessKm) + Number(routeKm)).toFixed(1),
+        nodeCount: trip.nodes.length,
+      }),
+    });
+
+    // Fit map to show the starting area
+    const start = trip.startNode;
+    setFitBounds({
+      south: start.lat - 0.02,
+      north: start.lat + 0.02,
+      west: start.lon - 0.02,
+      east: start.lon + 0.02,
+    });
+
+    setIsGeneratingTrip(false);
   };
 
   const canSave = !!routePlan && selectedNodes.length >= 2 && isApproved;
