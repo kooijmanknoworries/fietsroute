@@ -80,6 +80,7 @@ import { useVoiceGuidance } from "@/hooks/use-voice-guidance";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { exportGPX, parseGPX } from "@/lib/gpx";
+import { generateTripByDistance } from "@/lib/trip-generator";
 import Map from "@/components/Map";
 import ElevationProfile from "@/components/ElevationProfile";
 import RouteSheet from "@/components/RouteSheet";
@@ -197,6 +198,10 @@ export default function Home() {
   );
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // Trip distance generator
+  const [tripDistanceKm, setTripDistanceKm] = useState("");
+  const [isGeneratingTrip, setIsGeneratingTrip] = useState(false);
 
   // Points of interest: which categories the user toggled on, plus the
   // "only along my route" corridor filter. POIs are fetched for the current
@@ -318,6 +323,85 @@ export default function Home() {
     setHolidayParkOpen(false);
     setHolidayParkQuery("");
     toast({ title: t("holiday.selected"), description: `${park.displayName} (${park.lat}, ${park.lon})` });
+  };
+
+  const handleGenerateTrip = async () => {
+    const targetKm = Number(tripDistanceKm);
+    if (!targetKm || targetKm <= 0 || targetKm > 200) return;
+
+    setIsGeneratingTrip(true);
+
+    // Get user's GPS position
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+      });
+
+      const userLon = position.coords.longitude;
+      const userLat = position.coords.latitude;
+      const targetMeters = targetKm * 1000;
+
+      // Generate trip using the loaded network data
+      const trip = generateTripByDistance(
+        userLon,
+        userLat,
+        targetMeters,
+        networkData?.nodes || [],
+        networkData?.segments || [],
+      );
+
+      if (!trip) {
+        toast({
+          title: t("tripGen.noNetwork"),
+          description: t("tripGen.noNetworkDesc"),
+        });
+        return;
+      }
+
+      if (trip.nodes.length < 2) {
+        toast({
+          title: t("tripGen.tooFewNodes"),
+          description: t("tripGen.tooFewNodesDesc", { targetKm }),
+        });
+        return;
+      }
+
+      // Set the generated nodes as selected
+      // The route will be planned automatically by the route planner
+      trip.nodes.forEach(node => handleNodeClick(node));
+
+      // Show summary toast
+      const accessKm = (trip.accessDistanceMeters / 1000).toFixed(1);
+      const routeKm = (trip.estimatedDistanceMeters / 1000).toFixed(1);
+      toast({
+        title: t("tripGen.generated"),
+        description: t("tripGen.generatedDesc", {
+          accessKm,
+          routeKm,
+          totalKm: (Number(accessKm) + Number(routeKm)).toFixed(1),
+          nodeCount: trip.nodes.length,
+        }),
+      });
+
+      // Fit map to show the starting area
+      const start = trip.startNode;
+      setFitBounds({
+        south: start.lat - 0.02,
+        north: start.lat + 0.02,
+        west: start.lon - 0.02,
+        east: start.lon + 0.02,
+      });
+    } catch (err) {
+      toast({
+        title: t("tripGen.locationError"),
+        description: err instanceof Error ? err.message : t("tripGen.locationErrorDesc"),
+      });
+    } finally {
+      setIsGeneratingTrip(false);
+    }
   };
 
   const canSave = !!routePlan && selectedNodes.length >= 2 && isApproved;
@@ -735,6 +819,36 @@ export default function Home() {
                 </Command>
               </PopoverContent>
             </Popover>
+          </div>
+
+          {/* Generate trip by distance */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <Bike className="h-4 w-4" /> {t("tripGen.label")}
+            </label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                min="1"
+                max="200"
+                placeholder={t("tripGen.placeholder")}
+                value={tripDistanceKm}
+                onChange={(e) => setTripDistanceKm(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                size="icon"
+                onClick={() => handleGenerateTrip()}
+                disabled={isGeneratingTrip || !tripDistanceKm || Number(tripDistanceKm) <= 0 || Number(tripDistanceKm) > 200}
+                title={t("tripGen.generateTitle")}
+              >
+                {isGeneratingTrip ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           <Separator />
